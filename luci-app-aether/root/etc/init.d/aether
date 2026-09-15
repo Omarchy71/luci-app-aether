@@ -188,7 +188,9 @@ start_service() {
 	SOCKS_PORT="${bind_address##*:}"
 	[ -n "$SOCKS_HOST" ] || SOCKS_HOST="127.0.0.1"
 	[ -n "$SOCKS_PORT" ] || SOCKS_PORT="1080"
-	wait_for "SOCKS $bind_address" 90 "nc -z -w1 $SOCKS_HOST $SOCKS_PORT" \
+	# NOTE: plain busybox nc — no -z flag (unsupported there). stdin from
+	# /dev/null makes it exit right after connect: 0 = SOCKS up.
+	wait_for "SOCKS $bind_address" 90 "nc -w1 $SOCKS_HOST $SOCKS_PORT < /dev/null" \
 		|| { echo "down" >"$RUN_DIR/state"; return 1; }
 
 	if [ "$vpn_mode" = "1" ]; then

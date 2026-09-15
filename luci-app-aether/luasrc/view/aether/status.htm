@@ -3,7 +3,9 @@
 <%
 	local state = luci.sys.exec("cat /var/run/aether/state 2>/dev/null"):gsub("\n", "")
 	local uptime = luci.sys.exec("cat /var/run/aether/uptime 2>/dev/null"):gsub("\n", "")
-	local tun = luci.sys.exec("ip -o link show aether0 2>/dev/null"):gsub("\n", "")
+	local tun_name = luci.sys.exec("uci -q get aether.main.tun_name 2>/dev/null"):gsub("\n", "")
+	if tun_name == "" then tun_name = "aether0" end
+	local tun = luci.sys.exec("ip -o link show " .. tun_name .. " 2>/dev/null"):gsub("\n", "")
 	local log = luci.sys.exec("logread -e aether 2>/dev/null | tail -30")
 	if state == "" then state = "down" end
 %>
@@ -11,7 +13,7 @@
 	<legend><%:Service%></legend>
 	<table class="table">
 		<tr class="tr"><td class="td left" width="33%"><%:State%></td><td class="td left"><strong><%=state%></strong><% if uptime ~= "" then %> (since <%=uptime%>)<% end %></td></tr>
-		<tr class="tr"><td class="td left"><%:TUN interface%></td><td class="td left"><% if tun ~= "" then %><code>aether0 up</code><% else %><%:down%> — <%:check the log below, then Services → Aether → Save & Apply%><% end %></td></tr>
+		<tr class="tr"><td class="td left"><%:TUN interface%></td><td class="td left"><% if tun ~= "" then %><code><%=tun_name%> up</code><% else %><%:down%> — <%:check the log below, then Services → Aether → Save & Apply%><% end %></td></tr>
 	</table>
 </fieldset>
 <fieldset class="cbi-section">
