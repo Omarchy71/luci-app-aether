@@ -1,20 +1,25 @@
-# luci-app-aether
+# luci-app-aether (gool-only)
 
 LuCI app + opkg package + procd service that drives the
 [Aether](https://github.com/CluvexStudio/Aether) censorship-circumvention core
-(MASQUE / WireGuard / gool / mim) on OpenWrt routers, with full-system TUN via
+in **gool-only mode** (WG-in-WG) on OpenWrt routers, with full-system TUN via
 `hev-socks5-tunnel` and one-switch direct routing for all Iranian destinations.
 
 This is the router sibling of [Aethery](https://github.com/Omarchy71/Aethery)
-(Windows desktop GUI): same core binary, same flag map, same embedded Iran
+(Windows desktop GUI): same core binary, same gool flag map, same embedded Iran
 prefix lists — re-expressed as UCI config + procd + LuCI instead of Tauri.
 
 ## Target
 
-Primary: **Linksys EA8300** (`ipq40xx/generic`, ARM Cortex-A7, 256 MB RAM) on
+Primary: **Linksys EA8300** (`ipq40xx/generic`, ARM Cortex-A7) on
 OpenWrt 24.10. The bundled core is upstream's `aether-linux-armv7-musl`
 (statically linked, pinned to the same `v2.0.0` as Aethery), so it runs on any
 armv7 OpenWrt target — but only `arm_cortex-a7_neon-vfpv4` ipks are built here.
+
+Only the gool protocol is exposed: no MASQUE / WireGuard / mim options, no
+fragment / ECH / TLS-groups settings. The init script always passes `--gool`
+plus the gool-relevant flags (`--wg-peer`, `--wiw-outer/inner`, `--keepalive`,
+WG-family `--noize`), mirroring `profiles.rs` `as_args()` for `Protocol::Gool`.
 
 ## Install
 
@@ -29,15 +34,18 @@ opkg install luci-app-aether_*.ipk
 /etc/init.d/aether enable
 ```
 
-Then open LuCI → Services → Aether, fill in the profile, tick **Direct
-Iranian sites**, and start.
+Then open LuCI → Services → Aether, fill in the gool endpoints (or leave them
+empty for auto-scan), tick **Direct Iranian sites**, and start.
+
+Upgrading from a pre-0.2.0 (multi-protocol) config: legacy options (`peer`,
+`mim_*`, `fragment*`, `ech`, `tls_groups`, MASQUE `firewall`/`gfw` noize) are
+ignored; `noize` falls back to `balanced`. Re-save once in LuCI to clean them.
 
 ## How it works
 
-- `/etc/init.d/aether` (procd) builds the exact same CLI flags Aethery's
-  `profiles.rs` `as_args()` produces (`--gool/--wg/--masque/--mim`, `--peer`,
-  `--wg-peer`, `--wiw-outer/inner`, `--mim-outer/inner`, `--noize`,
-  `--keepalive`, `--fragment/--ech/--tls-groups`, `--route-direct/block`,
+- `/etc/init.d/aether` (procd) builds the exact same gool CLI flags Aethery's
+  `profiles.rs` `as_args()` produces for gool (`--gool`, `--wg-peer`,
+  `--wiw-outer/inner`, `--noize`, `--keepalive`, `--route-direct/block`,
   `--routes`, `--mark`), starts the core, waits for its SOCKS port, then
   starts `hev-socks5-tunnel` on `aether0`.
 - Loop avoidance uses the Linux path: core + hev sockets carry fwmark `0x9e`

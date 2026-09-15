@@ -1,9 +1,9 @@
--- Aether LuCI settings. Field-for-field the UCI mirror of Aethery's
--- connection profile: the init script turns these into the same CLI flags
--- profiles.rs as_args() produces. Gating mirrors the desktop UI: endpoint
--- pins only apply to their protocol family, fragment/ECH only to MASQUE.
+-- Aether LuCI settings (gool-only, Linksys EA8300). UCI mirror of Aethery's
+-- connection profile for Protocol::Gool: the init script turns these into
+-- the same CLI flags profiles.rs as_args() produces for gool
+-- (--gool, --wg-peer, --wiw-outer/inner, --keepalive, WG-family --noize).
 local m = Map("aether", translate("Aether"),
-	translate("Censorship-circumvention core (MASQUE / WireGuard / gool / mim) with full-system TUN. Same flag map as the Aethery desktop app."))
+	translate("Censorship-circumvention core in gool-only mode (Linksys EA8300) with full-system TUN. Same flag map as the Aethery desktop app for gool."))
 
 local conn = m:section(NamedSection, "main", "aether", translate("Connection"))
 conn.addremove = false
@@ -12,12 +12,9 @@ local en = conn:option(Flag, "enabled", translate("Enabled"),
 	translate("Start at boot and on Save & Apply."))
 en.rmempty = false
 
-local proto = conn:option(ListValue, "protocol", translate("Protocol"))
-proto:value("auto", translate("Auto"))
-proto:value("masque", "MASQUE")
-proto:value("wg", translate("WireGuard"))
-proto:value("gool", "gool")
-proto:value("mim", "mim")
+local proto = conn:option(DummyValue, "protocol", translate("Protocol"))
+proto.default = "gool"
+proto.description = translate("Fixed to gool (WG-in-WG) in this build.")
 
 local scan = conn:option(ListValue, "scan_mode", translate("Scan mode"))
 scan:value("turbo", translate("Turbo"))
@@ -32,35 +29,21 @@ ipv:value("v4", "IPv4")
 ipv:value("v6", "IPv6")
 
 local noize = conn:option(ListValue, "noize", translate("Obfuscation profile"),
-	translate("MASQUE family uses firewall / gfw / off; WireGuard and gool use balanced / aggressive / light / off."))
-noize:value("firewall", translate("Firewall (MASQUE)"))
-noize:value("gfw", "GFW (MASQUE)")
-noize:value("balanced", translate("Balanced (WG/gool)"))
-noize:value("aggressive", translate("Aggressive (WG/gool)"))
-noize:value("light", translate("Light (WG/gool)"))
+	translate("gool uses the WireGuard table: balanced / aggressive / light / off."))
+noize:value("balanced", translate("Balanced"))
+noize:value("aggressive", translate("Aggressive"))
+noize:value("light", translate("Light"))
 noize:value("off", translate("Off"))
 
 conn:option(Flag, "quick_reconnect", translate("Quick reconnect"))
 
 local pin = m:section(NamedSection, "main", "aether", translate("Endpoint pinning"),
-	translate("Skip the scan with known-good addresses. Each field is only sent for its protocol family."))
+	translate("Skip the scan with known-good gool addresses (host:port). Empty = auto-scan."))
 pin.addremove = false
-pin:option(Value, "peer", translate("MASQUE / WG / gool endpoint (--peer)"))
-pin:option(Value, "wg_peer", translate("WG / gool peer (--wg-peer)"))
+pin:option(Value, "wg_peer", translate("gool peer (--wg-peer)"))
 pin:option(Value, "wiw_outer", translate("gool outer (--wiw-outer)"))
 pin:option(Value, "wiw_inner", translate("gool inner (--wiw-inner)"))
-pin:option(Value, "mim_outer", translate("mim outer (--mim-outer)"))
-pin:option(Value, "mim_inner", translate("mim inner (--mim-inner)"))
-pin:option(Value, "wg_keepalive", translate("WireGuard keepalive (seconds)"))
-
-local ev = m:section(NamedSection, "main", "aether", translate("MASQUE evasion"),
-	translate("Only sent for the MASQUE family (auto counts)."))
-ev.addremove = false
-ev:option(Flag, "fragment", translate("Fragment"))
-ev:option(Value, "fragment_size", translate("Fragment size range"))
-ev:option(Value, "fragment_delay", translate("Fragment delay range"))
-ev:option(Value, "ech", translate("ECH (off / auto / custom value)"))
-ev:option(Value, "tls_groups", translate("TLS groups"))
+pin:option(Value, "wg_keepalive", translate("Keepalive in seconds (--keepalive, empty = core default)"))
 
 local rt = m:section(NamedSection, "main", "aether", translate("Routing"))
 rt.addremove = false

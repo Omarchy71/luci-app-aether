@@ -1,10 +1,17 @@
 #!/bin/sh /etc/rc.common
 # shellcheck disable=SC2154,SC1090
-# Aether for OpenWrt (procd): drive the Aether core, layer hev-socks5-tunnel
+# Aether for OpenWrt (procd): drive the Aether v2.0.0 core in gool-only
+# mode (Linksys EA8300, ipq40xx/generic), layer hev-socks5-tunnel
 # as full-system TUN, and route Iranian destinations direct via the WAN.
 #
-# Flag map mirrors Aethery's profiles.rs as_args(); loop avoidance uses the
-# Linux path (fwmark 0x9e + `ip rule fwmark … table main`).
+# Flag map mirrors Aethery's profiles.rs as_args() for Protocol::Gool:
+# --gool, scan mode, IP version, quick-reconnect, --noize (WG family:
+# balanced/aggressive/light/off), --wg-peer, --wiw-outer/inner,
+# --keepalive, routing (--routes/--route-direct/--route-block) and
+# --mark. NOTE: --peer is deliberately NOT sent for gool (profiles.rs
+# only sends it for Auto/MASQUE/WireGuard); MASQUE-only flags
+# (--fragment/--ech/--tls-groups) and mim flags are not supported here.
+# Loop avoidance uses the Linux path (fwmark 0x9e + `ip rule fwmark … table main`).
 START=95
 STOP=10
 USE_PROCD=1
@@ -38,12 +45,8 @@ build_args() {
 	add() { ARGS="$ARGS $1"; }
 	add2() { ARGS="$ARGS $1 $2"; }
 
-	case "$protocol" in
-		masque) add "--masque" ;;
-		wg) add "--wg" ;;
-		gool) add "--gool" ;;
-		mim) add "--mim" ;;
-	esac
+	# gool-only: the protocol is fixed, never read from UCI.
+	add "--gool"
 	case "$scan_mode" in
 		turbo) add "--turbo" ;;
 		thorough) add "--thorough" ;;
@@ -58,39 +61,21 @@ build_args() {
 	esac
 	if [ "$quick_reconnect" = "1" ]; then add "--quick-reconnect";
 	else add "--no-quick-reconnect"; fi
-	add2 "--noize" "$noize"
+	# WG-family noize only; anything else (e.g. legacy firewall/gfw from a
+	# pre-0.2.0 config) falls back to balanced.
+	case "$noize" in
+		balanced|aggressive|light|off) add2 "--noize" "$noize" ;;
+		*) add2 "--noize" "balanced" ;;
+	esac
 
-	# Endpoint pinning, gated per family exactly like as_args().
-	case "$protocol" in
-		auto|masque|wg|gool)
-			valid_endpoint "$peer" && add2 "--peer" "$peer" ;;
-	esac
-	case "$protocol" in
-		wg|gool) valid_endpoint "$wg_peer" && add2 "--wg-peer" "$wg_peer" ;;
-	esac
-	if [ "$protocol" = "gool" ]; then
-		valid_endpoint "$wiw_outer" && add2 "--wiw-outer" "$wiw_outer"
-		valid_endpoint "$wiw_inner" && add2 "--wiw-inner" "$wiw_inner"
-	fi
-	if [ "$protocol" = "mim" ]; then
-		valid_endpoint "$mim_outer" && add2 "--mim-outer" "$mim_outer"
-		valid_endpoint "$mim_inner" && add2 "--mim-inner" "$mim_inner"
-	fi
-	case "$protocol" in
-		wg|gool)
-			case "$wg_keepalive" in ''|*[!0-9]*) ;;
-				*) add2 "--keepalive" "$wg_keepalive" ;;
-			esac ;;
-	esac
-	case "$protocol" in
-		auto|masque|mim)
-			if [ "$fragment" = "1" ]; then
-				add "--fragment"
-				[ -n "$fragment_size" ] && add2 "--fragment-size" "$fragment_size"
-				[ -n "$fragment_delay" ] && add2 "--fragment-delay" "$fragment_delay"
-			fi
-			[ -n "$ech" ] && [ "$ech" != "off" ] && add2 "--ech" "$ech"
-			[ -n "$tls_groups" ] && add2 "--tls-groups" "$tls_groups" ;;
+	# Endpoint pinning for gool only (mirrors as_args() for Protocol::Gool).
+	# --peer is NOT sent for gool; legacy 'peer'/mim/fragment/ech/tls_groups
+	# UCI values are ignored.
+	valid_endpoint "$wg_peer" && add2 "--wg-peer" "$wg_peer"
+	valid_endpoint "$wiw_outer" && add2 "--wiw-outer" "$wiw_outer"
+	valid_endpoint "$wiw_inner" && add2 "--wiw-inner" "$wiw_inner"
+	case "$wg_keepalive" in ''|*[!0-9]*) ;;
+		*) add2 "--keepalive" "$wg_keepalive" ;;
 	esac
 
 	# Routing: custom file wins (preset skipped + logged); otherwise the
@@ -175,9 +160,8 @@ wait_for() {
 
 start_service() {
 	config_load aether
-	for o in enabled protocol scan_mode ip_version noize quick_reconnect \
-		peer wg_peer wiw_outer wiw_inner mim_outer mim_inner wg_keepalive \
-		fragment fragment_size fragment_delay ech tls_groups bind_address \
+	for o in enabled scan_mode ip_version noize quick_reconnect \
+		wg_peer wiw_outer wiw_inner wg_keepalive bind_address \
 		dns vpn_mode tun_name tun_mtu direct_iran route_direct route_block routes_file; do
 		section_get "$o" "$o"
 	done
@@ -198,7 +182,7 @@ start_service() {
 	procd_set_param stderr 1
 	procd_close_instance
 	# shellcheck disable=SC2154
-	log "core started (protocol=$protocol)"
+	log "core started (protocol=gool)"
 
 	SOCKS_HOST="${bind_address%:*}"
 	SOCKS_PORT="${bind_address##*:}"

@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-aether
-PKG_VERSION:=0.1.0
+PKG_VERSION:=0.2.0
 PKG_RELEASE:=1
 
 PKG_LICENSE:=MIT
@@ -23,15 +23,16 @@ define Package/luci-app-aether
   SECTION:=luci
   CATEGORY:=LuCI
   SUBMENU:=3. Applications
-  TITLE:=LuCI support for Aether (MASQUE/WireGuard/gool + Iran direct routing)
+  TITLE:=LuCI support for Aether gool + Iran direct routing (Linksys EA8300)
   DEPENDS:=+luci-base +hev-socks5-tunnel +ip-full +kmod-tun
   PKGARCH:=arm_cortex-a7_neon-vfpv4
 endef
 
 define Package/luci-app-aether/description
-  Web UI and procd service driving the Aether censorship-circumvention
-  core on OpenWrt routers: full-system TUN via hev-socks5-tunnel and
-  one-switch direct routing for all Iranian destinations.
+  Web UI and procd service driving the Aether v2.0.0 censorship-circumvention
+  core in gool-only mode on OpenWrt routers (primary target: Linksys EA8300,
+  ipq40xx/generic): full-system TUN via hev-socks5-tunnel and one-switch
+  direct routing for all Iranian destinations.
 endef
 
 define Build/Prepare
