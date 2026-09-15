@@ -10,12 +10,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+      - name: Install lua for syntax check
+        run: sudo apt-get update && sudo apt-get install -y lua5.4
       - name: Shell syntax + Lua syntax
         run: |
           sh -n luci-app-aether/root/etc/init.d/aether
-          luac -p luci-app-aether/luasrc/controller/aether.lua \
-                 luci-app-aether/luasrc/model/cbi/aether.lua \
-            || lua -e "assert(loadfile('luci-app-aether/luasrc/controller/aether.lua')); assert(loadfile('luci-app-aether/luasrc/model/cbi/aether.lua')); print('lua ok')"
+          luac5.4 -p luci-app-aether/luasrc/controller/aether.lua \
+                      luci-app-aether/luasrc/model/cbi/aether.lua
           python3 -c "
           import ipaddress
           n = 0
