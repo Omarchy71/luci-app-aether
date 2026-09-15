@@ -52,8 +52,8 @@ jobs:
           mkdir -p ~/sdk && tar -xf sdk.tar -C ~/sdk --strip-components=1
 
       - name: Add package feed + build ipk
-        working-directory: ~/sdk
         run: |
+          cd "$HOME/sdk"
           echo "src-link custom $GITHUB_WORKSPACE" >> feeds.conf.default
           ./scripts/feeds update packages luci
           ./scripts/feeds install luci-app-aether
