@@ -188,6 +188,12 @@ start_service() {
 	[ -x "$PROG_AETHER" ] || { log "ERROR: $PROG_AETHER missing"; echo "down" >"$RUN_DIR/state"; return 1; }
 
 	build_args
+	# A previous start that timed out waiting for SOCKS leaves the core
+	# (and possibly hev) running detached — procd no longer tracks it
+	# and a fresh core would collide on --bind. Reap before starting.
+	for p in $(pidof aether 2>/dev/null); do kill "$p" 2>/dev/null; done
+	for p in $(pidof hev-socks5-tunnel hev-socks5-tunn 2>/dev/null); do kill "$p" 2>/dev/null; done
+	sleep 1
 	# shellcheck disable=SC2086
 	procd_open_instance aether
 	procd_set_param command $PROG_AETHER $ARGS
@@ -205,8 +211,10 @@ start_service() {
 	# NOTE: this BusyBox nc has no -w1 and exits 0 even on refused
 	# connections — but prints "can't connect to remote host". So the
 	# probe waits until that message DISAPPEARS (SOCKS up).
-	# 600 tries: a full gool scan + validation takes several minutes.
-	wait_for "SOCKS $bind_address" 600 "! (nc $SOCKS_HOST $SOCKS_PORT < /dev/null 2>&1 | grep -q \"can.t connect\")" \
+	# 1200 tries: a full gool scan + validation took 10+ minutes on this
+	# link — timing out earlier orphans the core (still running, never
+	# reaching hev/TUN setup) and wedges the service in state=down.
+	wait_for "SOCKS $bind_address" 1200 "! (nc $SOCKS_HOST $SOCKS_PORT < /dev/null 2>&1 | grep -q \"can.t connect\")" \
 		|| { echo "down" >"$RUN_DIR/state"; return 1; }
 
 	if [ "$vpn_mode" = "1" ]; then

@@ -3,8 +3,8 @@
 # country and TUN ping. Runs ONLY on manual Refresh (or a stale cache),
 # never on page poll: the page polls the cached JSON, which is instant.
 #
-# One HTTPS fetch to the Cloudflare trace endpoint does triple duty:
-# exit IP + country come from the body, latency from the fetch time.
+# Exit IP + country come from one HTTPS fetch to the Cloudflare trace
+# endpoint; latency comes from a UDP DNS query straight through the TUN.
 # (ICMP ping can't work here — hev-socks5-tunnel carries TCP/UDP only;
 # and this BusyBox has neither a `timeout` applet nor wget --tries.)
 RUN_DIR=/var/run/aether
