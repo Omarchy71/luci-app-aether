@@ -59,6 +59,8 @@ define Package/luci-app-aether/install
 	$(INSTALL_CONF) ./root/etc/config/aether $(1)/etc/config/aether
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./root/etc/init.d/aether $(1)/etc/init.d/aether
+	$(INSTALL_DIR) $(1)/etc/hotplug.d/iface
+	$(INSTALL_BIN) ./root/etc/hotplug.d/iface/99-aether-mark $(1)/etc/hotplug.d/iface/99-aether-mark
 	$(INSTALL_DIR) $(1)/usr/share/aether
 	$(INSTALL_DATA) ./root/usr/share/aether/iran-v4.txt $(1)/usr/share/aether/iran-v4.txt
 	$(INSTALL_DATA) ./root/usr/share/aether/iran-v6.txt $(1)/usr/share/aether/iran-v6.txt

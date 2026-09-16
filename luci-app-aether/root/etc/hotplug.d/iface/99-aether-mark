@@ -1,0 +1,11 @@
+#!/bin/sh
+# luci-app-aether: keep the marked-egress WAN route (table 100) alive.
+# ifdown/ifup flushes routes bound to the device, which would strand the
+# core's marked packets in the (then dead) TUN and break re-scans.
+[ "$ACTION" = "ifup" ] || exit 0
+[ "$INTERFACE" = "wan" ] || exit 0
+[ -n "$DEVICE" ] || exit 0
+GW="$(ip route show default dev "$DEVICE" 2>/dev/null | sed -n 's/.*via \([0-9.]*\).*/\1/p' | head -1)"
+[ -n "$GW" ] || exit 0
+ip route replace default via "$GW" dev "$DEVICE" table 100
+logger -t aether "hotplug: table 100 default via $GW dev $DEVICE restored"
