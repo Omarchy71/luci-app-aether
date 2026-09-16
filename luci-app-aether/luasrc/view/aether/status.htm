@@ -30,7 +30,7 @@
 // Lightweight: polls the cached probe (instant server-side). A real
 // network probe runs only on Refresh or a stale (>15 min) cache.
 var EG_URL = '<%=luci.dispatcher.build_url("admin", "services", "aether", "egress")%>';
-var EG_NAMES = {US:'United States', DE:'Germany', NL:'Netherlands', FI:'Finland', GB:'United Kingdom', FR:'France', SE:'Sweden', NO:'Norway', CH:'Switzerland', AT:'Austria', IE:'Ireland', CA:'Canada', SG:'Singapore', JP:'Japan', AU:'Australia', PL:'Poland', CZ:'Czechia', ES:'Spain', IT:'Italy', PT:'Portugal', BE:'Belgium', DK:'Denmark', RO:'Romania', TR:'Turkey', AE:'UAE', IN:'India', BR:'Brazil', KR:'South Korea'};
+var EG_NAMES = {US:'United States', DE:'Germany', NL:'Netherlands', FI:'Finland', GB:'United Kingdom', FR:'France', SE:'Sweden', NO:'Norway', CH:'Switzerland', AT:'Austria', IE:'Ireland', CA:'Canada', SG:'Singapore', JP:'Japan', AU:'Australia', PL:'Poland', CZ:'Czechia', ES:'Spain', IT:'Italy', PT:'Portugal', BE:'Belgium', DK:'Denmark', RO:'Romania', TR:'Turkey', AE:'UAE', QA:'Qatar', SA:'Saudi Arabia', IQ:'Iraq', IL:'Israel', EG:'Egypt', RU:'Russia', UA:'Ukraine', AZ:'Azerbaijan', AM:'Armenia', GE:'Georgia', KZ:'Kazakhstan', PK:'Pakistan', IN:'India', BR:'Brazil', KR:'South Korea'};
 function eg_set(id, txt) { var el = document.getElementById(id); if (el) el.textContent = txt; }
 function eg_render(d) {
 	if (!d || d.state === 'unknown') return false;
