@@ -83,6 +83,11 @@ build_args() {
 	# default while the SOCKS probe checks bind_address (mismatch).
 	[ -n "$bind_address" ] && add2 "--bind" "$bind_address"
 
+	# Upstream DNS through the tunnel (mirrors profiles.rs as_args for
+	# every protocol incl. gool). Without it the core silently uses its
+	# own default instead of the configured value.
+	[ -n "$dns" ] && add2 "--dns" "$dns"
+
 	# Routing: custom file wins (preset skipped + logged); otherwise the
 	# Iran preset travels in a generated --routes file — ~2850 prefixes
 	# can never ride a command line.
@@ -171,6 +176,10 @@ start_service() {
 		section_get "$o" "$o"
 	done
 	# shellcheck disable=SC2154
+	# Defensive defaults — an empty tun_name/bind writes a broken
+	# hev.yml and misdirects the SOCKS probe.
+	[ -n "$tun_name" ] || tun_name="aether0"
+	[ -n "$bind_address" ] || bind_address="127.0.0.1:1080"
 	mkdir -p "$RUN_DIR"
 	[ "$enabled" = "1" ] || { echo "down (disabled)" >$RUN_DIR/state; return 0; }
 
@@ -234,17 +243,20 @@ net_up() {
 	ip rule show | grep -q "fwmark $FWMARK.*table 100" \
 		|| ip rule add fwmark "$FWMARK" table 100 priority 50
 
-	# Iran prefixes direct via WAN; the applied set is recorded so stop
-	# removes exactly what start added.
+	# Iran prefixes direct via WAN, v4 + v6 (same set the core gets in
+	# the --routes file); the applied set is recorded so stop removes
+	# exactly what start added. v6 adds fail silently on v4-only WAN.
 	: >"$RUN_DIR/iran.applied"
 	if [ "$direct_iran" = "1" ] && [ -z "$routes_file" ]; then
-		while read -r pfx; do
-			case "$pfx" in ''|\#*) continue ;; esac
-			if ip route add "$pfx" via "$WAN_GW" dev "$WAN_DEV" 2>/dev/null; then
-				echo "$pfx" >>"$RUN_DIR/iran.applied"
-			fi
-		done <"$SHARE_DIR/iran-v4.txt"
-		log "iran direct routes: $(wc -l <"$RUN_DIR/iran.applied") v4 via $WAN_GW"
+		for f in "$SHARE_DIR/iran-v4.txt" "$SHARE_DIR/iran-v6.txt"; do
+			while read -r pfx; do
+				case "$pfx" in ''|\#*) continue ;; esac
+				if ip route add "$pfx" via "$WAN_GW" dev "$WAN_DEV" 2>/dev/null; then
+					echo "$pfx" >>"$RUN_DIR/iran.applied"
+				fi
+			done <"$f"
+		done
+		log "iran direct routes: $(wc -l <"$RUN_DIR/iran.applied") via $WAN_GW"
 	fi
 
 	# The TUN default (metric 5) only wins if the WAN default has a higher
