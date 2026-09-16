@@ -55,7 +55,7 @@ jobs:
         run: |
           cd "$HOME/sdk"
           echo "src-link custom $GITHUB_WORKSPACE" >> feeds.conf.default
-          ./scripts/feeds update packages luci custom
+          ./scripts/feeds update base packages luci custom
           ./scripts/feeds install luci-app-aether
           printf 'CONFIG_PACKAGE_luci-app-aether=m\n' > .config
           make defconfig
