@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-aether
 PKG_VERSION:=0.2.0
-PKG_RELEASE:=5
+PKG_RELEASE:=6
 
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=Madjid <omarchy7117@atomicmail.io>
@@ -63,6 +63,8 @@ define Package/luci-app-aether/install
 	$(INSTALL_BIN) ./root/etc/hotplug.d/iface/99-aether-mark $(1)/etc/hotplug.d/iface/99-aether-mark
 	$(INSTALL_DIR) $(1)/usr/share/aether
 	$(INSTALL_BIN) ./root/usr/share/aether/egress-check.sh $(1)/usr/share/aether/egress-check.sh
+	$(INSTALL_BIN) ./root/usr/share/aether/finish.sh $(1)/usr/share/aether/finish.sh
+	$(INSTALL_DATA) ./root/usr/share/aether/setup-lib.sh $(1)/usr/share/aether/setup-lib.sh
 	$(INSTALL_DATA) ./root/usr/share/aether/iran-v4.txt $(1)/usr/share/aether/iran-v4.txt
 	$(INSTALL_DATA) ./root/usr/share/aether/iran-v6.txt $(1)/usr/share/aether/iran-v6.txt
 endef
