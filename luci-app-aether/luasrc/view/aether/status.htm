@@ -17,6 +17,61 @@
 	</table>
 </fieldset>
 <fieldset class="cbi-section">
+	<legend><%:Connection%></legend>
+	<table class="table">
+		<tr class="tr"><td class="td left" width="33%"><%:Exit IP%></td><td class="td left" id="eg-ip">—</td></tr>
+		<tr class="tr"><td class="td left"><%:Exit country%></td><td class="td left" id="eg-cc">—</td></tr>
+		<tr class="tr"><td class="td left"><%:TUN ping%></td><td class="td left" id="eg-ping">—</td></tr>
+		<tr class="tr"><td class="td left"><%:Last checked%></td><td class="td left"><span id="eg-ts">—</span>
+			<button class="btn cbi-button cbi-button-neutral" id="eg-refresh" style="margin-left:1em"><%:Refresh%></button></td></tr>
+	</table>
+</fieldset>
+<script type="text/javascript">
+// Lightweight: polls the cached probe (instant server-side). A real
+// network probe runs only on Refresh or a stale (>15 min) cache.
+var EG_URL = '<%=luci.dispatcher.build_url("admin", "services", "aether", "egress")%>';
+var EG_NAMES = {US:'United States', DE:'Germany', NL:'Netherlands', FI:'Finland', GB:'United Kingdom', FR:'France', SE:'Sweden', NO:'Norway', CH:'Switzerland', AT:'Austria', IE:'Ireland', CA:'Canada', SG:'Singapore', JP:'Japan', AU:'Australia', PL:'Poland', CZ:'Czechia', ES:'Spain', IT:'Italy', PT:'Portugal', BE:'Belgium', DK:'Denmark', RO:'Romania', TR:'Turkey', AE:'UAE', IN:'India', BR:'Brazil', KR:'South Korea'};
+function eg_set(id, txt) { var el = document.getElementById(id); if (el) el.textContent = txt; }
+function eg_render(d) {
+	if (!d || d.state === 'unknown') return false;
+	if (d.state !== 'up') { eg_set('eg-ip', d.state); eg_set('eg-cc', '—'); eg_set('eg-ping', '—'); }
+	else {
+		eg_set('eg-ip', d.egress_ip || '?');
+		eg_set('eg-cc', (EG_NAMES[d.country] || d.country || '?') + (d.country ? ' (' + d.country + ')' : ''));
+		eg_set('eg-ping', (d.ping_ms || '?') + ' ms');
+	}
+	eg_set('eg-ts', (d.ts || '—').replace('T', ' ').replace(/Z$/, ' UTC'));
+	return d.ts;
+}
+function eg_load(refresh, cb) {
+	var xhr = new XMLHttpRequest();
+	xhr.open('GET', EG_URL + (refresh ? '?refresh=1' : ''), true);
+	xhr.onreadystatechange = function() {
+		if (xhr.readyState === 4 && xhr.status === 200) {
+			try { var ts = eg_render(JSON.parse(xhr.responseText)); if (cb) cb(ts); } catch (e) {}
+		}
+	};
+	xhr.send();
+}
+var eg_boot_ts = null;
+eg_load(false, function(ts) {
+	eg_boot_ts = ts;
+	// stale (>15 min) or missing cache: trigger one background probe
+	if (!ts || (Date.now() - Date.parse(ts)) > 15 * 60 * 1000) eg_refresh_cycle();
+});
+function eg_refresh_cycle() {
+	eg_set('eg-ts', 'checking…');
+	eg_load(true);
+	var n = 0, iv = setInterval(function() {
+		eg_load(false, function(ts) {
+			if ((ts && ts !== eg_boot_ts) || (++n >= 8)) { eg_boot_ts = ts; clearInterval(iv); }
+		});
+	}, 4000);
+}
+document.getElementById('eg-refresh').onclick = eg_refresh_cycle;
+setInterval(function() { eg_load(false); }, 20000);
+</script>
+<fieldset class="cbi-section">
 	<legend><%:Recent log%></legend>
 	<pre><%=log%></pre>
 </fieldset>
