@@ -72,12 +72,12 @@ jobs:
           printf 'CONFIG_PACKAGE_luci-app-aether=m\n' > .config
           make defconfig
           make package/luci-app-aether/compile -j"$(nproc)" V=s
-          find bin/packages -name 'luci-app-aether_*.*pk'
+          find bin -name 'luci-app-aether_*.*pk'
 
       - name: Collect package
         run: |
           mkdir -p dist
-          find ~/sdk/bin/packages -name 'luci-app-aether_*.*pk' -exec cp {} dist/ \;
+          find ~/sdk/bin -name 'luci-app-aether_*.*pk' -exec cp {} dist/ \;
           ls -la dist/
 
       - uses: actions/upload-artifact@v5
