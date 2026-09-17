@@ -178,13 +178,13 @@ net_up() {
 	echo "WAN_DEV=$WAN_DEV" >>"$NET_ENV"
 
 	ip rule show | grep -q "fwmark $FWMARK" \
-		|| ip rule add fwmark "$FWMARK" table main priority 100
+		|| ip rule add fwmark "$FWMARK" table main priority 100 2>/dev/null
 
 	# Marked core egress must leave via WAN even after the TUN becomes
 	# the default route — otherwise it loops back into the tunnel.
 	ip route replace default via "$WAN_GW" dev "$WAN_DEV" table 100
 	ip rule show | grep -q "fwmark $FWMARK.*table 100" \
-		|| ip rule add fwmark "$FWMARK" table 100 priority 50
+		|| ip rule add fwmark "$FWMARK" table 100 priority 50 2>/dev/null
 
 	# Iran prefixes direct via WAN, v4 + v6 (same set the core gets in
 	# the --routes file); the applied set is recorded so stop removes
