@@ -4,7 +4,7 @@
 # config_load/config_get exist; the caller must config_load aether and
 # call load_options before using anything else here.
 PROG_AETHER=/usr/sbin/aether
-PROG_HEV=/usr/sbin/hev-socks5-tunnel
+PROG_HEV=/usr/bin/hev-socks5-tunnel
 SHARE_DIR=/usr/share/aether
 RUN_DIR=/var/run/aether
 ROUTES_OUT=$RUN_DIR/routes.txt
@@ -26,7 +26,7 @@ valid_endpoint() {
 	esac
 }
 
-section_get() { config_get "$2" main "$1" "$3"; }
+section_get() { local _v; _v=$(config_get "main" "$1" ""); export "$1=$_v"; }
 
 # Load every UCI option the setup needs + defensive defaults + derived
 # SOCKS host/port. An empty tun_name/bind writes a broken hev.yml and
@@ -35,7 +35,7 @@ load_options() {
 	for o in enabled scan_mode ip_version noize quick_reconnect \
 		wg_peer wiw_outer wiw_inner wg_keepalive bind_address \
 		dns vpn_mode tun_name tun_mtu direct_iran route_direct route_block routes_file; do
-		section_get "$o" "$o"
+		section_get "$o" "main"
 	done
 	# shellcheck disable=SC2154
 	[ -n "$tun_name" ] || tun_name="aether0"

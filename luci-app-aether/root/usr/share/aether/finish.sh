@@ -29,7 +29,7 @@ wait_for "SOCKS $bind_address" 1200 "! (nc $SOCKS_HOST $SOCKS_PORT < /dev/null 2
 # Bail out quietly if the service was disabled while we were waiting
 # (stop already killed the core; nothing left to layer onto).
 config_load aether
-section_get enabled enabled 0
+section_get enabled main 0
 [ "$enabled" = "1" ] || { rm -f "$RUN_DIR/finish.pid"; exit 0; }
 config_load aether
 load_options
