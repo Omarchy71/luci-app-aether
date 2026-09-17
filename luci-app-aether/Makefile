@@ -1,8 +1,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-aether
-PKG_VERSION:=0.2.0
-PKG_RELEASE:=6
+PKG_VERSION:=0.2.1
+PKG_RELEASE:=1
 
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=Madjid <omarchy7117@atomicmail.io>

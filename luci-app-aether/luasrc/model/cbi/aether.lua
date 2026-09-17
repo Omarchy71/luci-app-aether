@@ -1,20 +1,62 @@
--- Aether LuCI settings (gool-only, Linksys EA8300). UCI mirror of Aethery's
--- connection profile for Protocol::Gool: the init script turns these into
--- the same CLI flags profiles.rs as_args() produces for gool
--- (--gool, --wg-peer, --wiw-outer/inner, --keepalive, WG-family --noize).
+-- Aether LuCI — simplified control panel (gool-only, Linksys EA8300).
+-- Big Connect/Disconnect button + full-traffic toggle.
+-- Advanced settings (scan, noize, routing, pinning) remain available
+-- in the same map for power users.
 local m = Map("aether", translate("Aether"),
-	translate("Censorship-circumvention core in gool-only mode (Linksys EA8300) with full-system TUN. Same flag map as the Aethery desktop app for gool."))
+	translate("Gool-only censorship-circumvention core — OpenWrt router"))
 
-local conn = m:section(NamedSection, "main", "aether", translate("Connection"))
+-- ── Service control ──────────────────────────────────────────────
+local s = m:section(NamedSection, "main", "aether", translate("Service"))
+s.addremove = false
+
+local st = s:option(DummyValue, "_state", translate("State"))
+function st.cfgvalue(self, section)
+	local st = luci.sys.exec("cat /var/run/aether/state 2>/dev/null"):gsub("\n", "")
+	return (st == "") and "down" or st
+end
+
+local btn = s:option(Button, "_toggle")
+function btn.cfgvalue(self, section)
+	local st = luci.sys.exec("cat /var/run/aether/state 2>/dev/null"):gsub("\n", "")
+	if st == "up" then
+		self.inputtitle = translate("Disconnect")
+		self.inputstyle = "reset"
+	else
+		self.inputtitle = translate("Connect")
+		self.inputstyle = "apply"
+	end
+end
+function btn.write(self, section)
+	local st = luci.sys.exec("cat /var/run/aether/state 2>/dev/null"):gsub("\n", "")
+	if st == "up" then
+		luci.sys.call("/etc/init.d/aether disable; /etc/init.d/aether stop >/dev/null 2>&1")
+	else
+		luci.sys.call("/etc/init.d/aether enable; /etc/init.d/aether start >/dev/null 2>&1")
+	end
+	luci.http.redirect(luci.dispatcher.build_url("admin/services/aether"))
+end
+
+-- ── Full-traffic toggle ──────────────────────────────────────────
+local vm = m:section(NamedSection, "main", "aether", translate("VPN Mode"))
+vm.addremove = false
+
+local vf = vm:option(Flag, "vpn_mode", translate("Full-system VPN"),
+	translate("Layers hev-socks5-tunnel under aether0 and moves the default route onto it."))
+vf.rmempty = false
+
+-- ── TUN settings ─────────────────────────────────────────────────
+local tn = m:section(NamedSection, "main", "aether", translate("TUN settings"))
+tn.addremove = false
+tn:option(Value, "tun_name", translate("Interface name"))
+tn:option(Value, "tun_mtu", translate("MTU (1280–9000)"))
+tn:option(Value, "bind_address", translate("SOCKS bind (host:port)"))
+tn:option(Value, "dns", translate("Upstream DNS"))
+
+-- ── Connection profile (advanced) ────────────────────────────────
+local conn = m:section(NamedSection, "main", "aether", translate("Connection (advanced)"))
 conn.addremove = false
 
-local en = conn:option(Flag, "enabled", translate("Enabled"),
-	translate("Start at boot and on Save & Apply."))
-en.rmempty = false
-
-local proto = conn:option(DummyValue, "protocol", translate("Protocol"))
-proto.default = "gool"
-proto.description = translate("Fixed to gool (WG-in-WG) in this build.")
+conn:option(DummyValue, "protocol", translate("Protocol")).default = "gool"
 
 local scan = conn:option(ListValue, "scan_mode", translate("Scan mode"))
 scan:value("turbo", translate("Turbo"))
@@ -28,8 +70,7 @@ ipv:value("both", translate("Dual"))
 ipv:value("v4", "IPv4")
 ipv:value("v6", "IPv6")
 
-local noize = conn:option(ListValue, "noize", translate("Obfuscation profile"),
-	translate("gool uses the WireGuard table: balanced / aggressive / light / off."))
+local noize = conn:option(ListValue, "noize", translate("Obfuscation profile"))
 noize:value("balanced", translate("Balanced"))
 noize:value("aggressive", translate("Aggressive"))
 noize:value("light", translate("Light"))
@@ -37,37 +78,28 @@ noize:value("off", translate("Off"))
 
 conn:option(Flag, "quick_reconnect", translate("Quick reconnect"))
 
+-- ── Endpoint pinning ─────────────────────────────────────────────
 local pin = m:section(NamedSection, "main", "aether", translate("Endpoint pinning"),
 	translate("Skip the scan with known-good gool addresses (host:port). Empty = auto-scan."))
 pin.addremove = false
 pin:option(Value, "wg_peer", translate("gool peer (--wg-peer)"))
 pin:option(Value, "wiw_outer", translate("gool outer (--wiw-outer)"))
 pin:option(Value, "wiw_inner", translate("gool inner (--wiw-inner)"))
-pin:option(Value, "wg_keepalive", translate("Keepalive in seconds (--keepalive, empty = core default)"))
+pin:option(Value, "wg_keepalive", translate("Keepalive (seconds, empty = core default)"))
 
+-- ── Routing ──────────────────────────────────────────────────────
 local rt = m:section(NamedSection, "main", "aether", translate("Routing"))
 rt.addremove = false
 
 local di = rt:option(Flag, "direct_iran", translate("Direct Iranian sites"),
-	translate("Sends all ~2900 aggregated Iranian prefixes plus major domestic apps straight out via the WAN instead of the tunnel. Merges with Direct below. Skipped while a custom rules file is set."))
+	translate("Sends Iranian prefixes via WAN instead of the tunnel. Merges with Direct below."))
 di.rmempty = false
 
 rt:option(TextValue, "route_direct", translate("Direct"),
-	translate("Comma/newline separated: domain, IP/CIDR, port:443, private — same format as the core's --route-direct."))
+	translate("Comma/newline: domain, IP/CIDR, port:443, private — same as core's --route-direct."))
 rt:option(TextValue, "route_block", translate("Blocked"),
 	translate("Same format as --route-block."))
 rt:option(Value, "routes_file", translate("Rules file path (optional)"),
-	translate("Custom [block]/[direct] rules file. Takes precedence: the Iranian preset is skipped while set."))
-
-local vpn = m:section(NamedSection, "main", "aether", translate("VPN (TUN)"))
-vpn.addremove = false
-
-local vm = vpn:option(Flag, "vpn_mode", translate("Full-system VPN"),
-	translate("Layer hev-socks5-tunnel under aether0 and move the default route onto it."))
-vm.rmempty = false
-vpn:option(Value, "tun_name", translate("Interface name"))
-vpn:option(Value, "tun_mtu", translate("MTU (1280–9000, 1280–1420 for Iranian lines)"))
-vpn:option(Value, "bind_address", translate("SOCKS bind (host:port)"))
-vpn:option(Value, "dns", translate("Upstream DNS through the tunnel"))
+	translate("Custom [block]/[direct] file. Takes precedence over Iranian preset."))
 
 return m
