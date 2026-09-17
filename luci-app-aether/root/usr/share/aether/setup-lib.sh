@@ -70,7 +70,7 @@ build_args() {
 	# WG-family noize only; anything else (e.g. legacy firewall/gfw from a
 	# pre-0.2.0 config) falls back to balanced.
 	case "$noize" in
-		balanced|aggressive|light|off) add2 "--noize" "$noize" ;;
+		none|gfw|balanced|aggressive|light|off) add2 "--noize" "$noize" ;;
 		*) add2 "--noize" "balanced" ;;
 	esac
 
