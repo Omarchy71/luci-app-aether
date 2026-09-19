@@ -1,0 +1,15 @@
+#!/bin/sh
+# ZRAM swap setup for OpenWrt routers with limited RAM
+# Install: opkg install kmod-zram zram-swap
+# Run on boot to enable compressed swap in RAM
+
+MOD_DIR="/lib/modules/$(uname -r)/kernel/drivers/block/zram"
+if [ -f "$MOD_DIR/zram.ko" ]; then
+    insmod zram num_devices=1 2>/dev/null || true
+    echo 64 > /sys/block/zram0/disksize  # 64MB zram
+    mkswap /dev/zram0 2>/dev/null
+    swapon /dev/zram0 2>/dev/null
+    echo "ZRAM swap enabled (64MB)"
+else
+    echo "ZRAM module not available"
+fi

@@ -16,6 +16,28 @@ HEV_PID=$RUN_DIR/hev.pid
 FWMARK=0x9e
 TUN_IPV4=198.18.0.1
 IR_DOMAINS="private,digikala.com,aparat.com,filimo.com,telewebion.com,varzesh3.com,snapp.ir,cafebazaar.ir,divar.ir,namava.ir,shad.ir"
+# ─── Pre-allocated Iran route cache (OPT-3) ──
+# Iran routes are cached in /var/run/aether/iran.applied
+# This avoids re-parsing 2853 prefixes on every check
+ensure_iran_cache() {
+	local cache="/var/run/aether/iran.applied"
+	if [ ! -f "$cache" ] || [ ! -s "$cache" ]; then
+		echo "[setup] Pre-loading Iran routes..."
+		/refresh-iran-ranges.sh >/dev/null 2>&1 &
+		# Wait briefly for cache
+		local i=0
+		while [ ! -s "$cache" ] && [ $i -lt 10 ]; do
+			sleep 1
+			i=$((i+1))
+		done
+	fi
+	if [ -s "$cache" ]; then
+		echo "[setup] Iran cache ready ($(wc -l < "$cache") routes)"
+	fi
+}
+
+# ─── Initialize pre-allocated buffers ────────────
+ensure_iran_cache
 log() { logger -t aether "$*"; echo "[$(date +%T)] $*" >>"$RUN_DIR/setup.log"; }
 
 valid_endpoint() {

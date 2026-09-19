@@ -306,9 +306,7 @@ action_youtube = function()
 
 	local start_ms = os.time() * 1000
 	local cmd = string.format("curl -s --connect-timeout %d --max-time %d '%s' -o /dev/null -w '%%{http_code}' 2>/dev/null", timeout, timeout, url)
-	local f = io.popen(cmd)
-	local result = f:read("*a"):gsub("%s+", "")
-	f:close()
+	local result = sys.exec(cmd):gsub("%s+", "")
 	local end_ms = os.time() * 1000
 
 	local ydata = {
@@ -354,10 +352,10 @@ action_stats = function()
 				f:close()
 				if uticks and tonumber(uticks) then uptime = (tonumber(uticks)/100) .. "s" end
 			end
-			local f2 = io.popen("ps -o rss= -p $(pgrep -f /usr/sbin/aether) 2>/dev/null | awk '{sum+=$1} END {print sum}'")
-			mem = f2:read("*a"):gsub("%s+", "") or "-"
-			f2:close()
-			if mem and tonumber(mem) then mem = (mem / 1024) .. "MB" end
+			local mem_val = sys.meminfo()
+			if mem_val and mem_val["buffers/cache"] then
+				mem = tostring(math.floor(mem_val["buffers/cache"] / 1024)) .. "MB"
+			end
 		end
 	end
 
