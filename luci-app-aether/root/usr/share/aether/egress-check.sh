@@ -133,6 +133,7 @@ reconnect_try4() {
 
 # ─── Main reconnection logic with fallback chain ────────────
 attempt_reconnect() {
+	[ "$auto_reconnect" != "1" ] && { echo "[Reconnect] Disabled"; return 1; }
 	get_config
 	local max_attempts="${max_reconnect_attempts:-0}"
 	local attempt=0

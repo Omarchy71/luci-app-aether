@@ -93,6 +93,7 @@ heal_tun() {
 # ─── infinite self-healing loop ───────────────────
 echo "[finish] Starting self-healing loop..."
 while true; do
+	[ "$auto_connect" != "1" ] && { echo "[finish] Auto-connect disabled"; sleep "${watchdog_interval:-30}"; continue; }
 	heal_tun
 
 	# Check YouTube with deep content verification if configured

@@ -67,10 +67,89 @@ load_options() {
 	[ "$reprovision" = "1" ] || reprovision="0"
 }
 
+# ─── Protocol-specific arg builders ────────────
+build_gool_args() {
+	add "--gool"
+	local scan_mode="$scan_mode"
+	[ "$scan_mode" = "balanced" ] || add "--$scan_mode"
+	[ "$ip_version" = "both" ] || { [ "$ip_version" = "ipv4" ] && add "-4" || [ "$ip_version" = "ipv6" ] && add "-6"; }
+	[ "$quick_reconnect" = "1" ] && add "--quick-reconnect" || add "--no-quick-reconnect"
+	[ "$noize" != "none" ] && add "--noize=$noize"
+	[ "$wiw_scan" = "1" ] && add "--wiw-scan"
+	[ -n "$wg_peer" ] && add "--wg-peer=$wg_peer"
+	[ -n "$wiw_outer" ] && add "--wiw-outer=$wiw_outer"
+	[ -n "$wiw_inner" ] && add "--wiw-inner=$wiw_inner"
+}
+
+build_masque_args() {
+	add "--masque"
+	[ "$masque_h2" = "1" ] && add "--h2" || add "--no-h2"
+	[ "$masque_quic_v2" = "1" ] && add "--h3"
+	case "$masque_ech" in
+		enabled) add "--ech" ;;
+		disabled) add "--no-ech" ;;
+	esac
+	[ -n "$masque_fragment" ] && [ "$masque_fragment" != "0" ] && add "--fragment=$masque_fragment"
+	[ -n "$masque_fragment_size" ] && add "--fragment-size=$masque_fragment_size"
+	[ -n "$masque_fragment_delay" ] && add "--fragment-delay=$masque_fragment_delay"
+	[ -n "$tls_groups" ] && add "--tls-groups=$tls_groups"
+	[ -n "$masque_h2_peer" ] && add "--h2-peer=$masque_h2_peer"
+	[ "$masque_no_data_check" = "1" ] && add "--no-data-check"
+}
+
+build_wg_args() {
+	add "--wg"
+	[ -n "$wg_peer" ] && add "--wg-peer=$wg_peer"
+	[ "$wg_keepalive" != "25" ] && add "--keepalive=$wg_keepalive"
+	[ "$no_profile_retry" = "1" ] && add "--no-profile-retry"
+}
+
+build_mim_args() {
+	add "--mim"
+	[ -n "$mim_outer" ] && add "--mim-outer=$mim_outer"
+	[ -n "$mim_inner" ] && add "--mim-inner=$mim_inner"
+}
+
+# ─── Main build_args dispatcher ────────────────# ─── Global arg builders ──────────────────
+add() { ARGS="$ARGS $1"; }
+add2() { ARGS="$ARGS $1 $2"; }
+
+
 build_args() {
 	ARGS=""
-	add() { ARGS="$ARGS $1"; }
-	add2() { ARGS="$ARGS $1 $2"; }
+
+	# Protocol selector
+	case "$protocol" in
+		masque) build_masque_args ;;
+		wg|wireguard) build_wg_args ;;
+		mim) build_mim_args ;;
+		*) build_gool_args ;;
+	esac
+
+	# Common flags
+	[ -n "$bind_address" ] && add "--bind=$bind_address"
+	[ -n "$dns" ] && add "--dns=$dns"
+	[ "$direct_iran" = "1" ] && add "--route-direct"
+	[ -n "$route_direct" ] && add "--route=$route_direct"
+	[ -n "$route_block" ] && add "--route-block=$route_block"
+	[ -n "$routes_file" ] && add "--routes=$routes_file"
+	[ "$http_proxy" = "1" ] && add "--http-proxy --http-port=$http_port"
+	[ -n "$upstream_proxy" ] && add "--upstream-proxy=$upstream_proxy"
+	[ "$vpn_mode" = "1" ] || add "--no-tun"
+	[ "$no_profile_retry" = "1" ] && add "--no-profile-retry"
+	[ "$reprovision" = "1" ] && add "--reprovision"
+	[ "$route_sniff" = "1" ] && add "--route-sniff=$sniffing_timeout_ms"
+	[ "$startup_secs" != "30" ] && add "--startup-deadline=$startup_secs"
+	[ "$perf_profile" = "medium" ] && add "--turbo"
+	[ "$perf_profile" = "high" ] && add "--thorough"
+	add "--mark=$FWMARK"
+
+	# Log
+	log "Built args: $ARGS"
+}
+
+build_args() {
+	ARGS=""
 
 	# ─── Protocol selector ──────────────────────────────
 	case "$protocol" in

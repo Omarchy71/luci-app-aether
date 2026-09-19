@@ -1,0 +1,94 @@
+name: build-router-ipk
+
+on:
+  push:
+    tags: ["router-*"]
+  workflow_dispatch:
+    inputs:
+      owrt_series:
+        description: "OpenWrt release series (24.10 builds ipk, 25.12 builds apk)"
+        required: false
+        default: "24.10"
+        type: choice
+        options: ["24.10", "25.12"]
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install lua for syntax check
+        run: sudo apt-get update && sudo apt-get install -y lua5.4
+      - name: Shell syntax + Lua syntax
+        run: |
+          sh -n luci-app-aether/root/etc/init.d/aether
+          luac5.4 -p luci-app-aether/luasrc/controller/aether.lua \
+                      luci-app-aether/luasrc/model/cbi/aether.lua
+          python3 -c "
+          import ipaddress
+          n = 0
+          for f in ['luci-app-aether/root/usr/share/aether/iran-v4.txt',
+                    'luci-app-aether/root/usr/share/aether/iran-v6.txt']:
+              for line in open(f):
+                  line = line.strip()
+                  if line: ipaddress.ip_network(line); n += 1
+          print(f'lists ok: {n} prefixes')"
+
+  build:
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install SDK build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk \
+            gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
+            python3-setuptools rsync unzip zlib1g-dev file wget zstd
+
+      - name: Fetch OpenWrt SDK (ipq40xx/generic)
+        run: |
+          SERIES="${{ github.event.inputs.owrt_series }}"
+          [ -z "$SERIES" ] && SERIES="24.10"
+          REL=$(curl -s https://downloads.openwrt.org/releases/ \
+                | grep -oE "$SERIES\\.[0-9]+" | sort -uV | tail -1)
+          echo "release=$REL" | tee -a "$GITHUB_ENV"
+          BASE="https://downloads.openwrt.org/releases/$REL/targets/ipq40xx/generic"
+          SDK=$(curl -s "$BASE/" | grep -oE 'openwrt-sdk-[^"]+\.tar\.(xz|zst)' | head -1)
+          echo "sdk=$SDK" | tee -a "$GITHUB_ENV"
+          curl -sL -o sdk.tar "$BASE/$SDK"
+          mkdir -p ~/sdk && tar -xf sdk.tar -C ~/sdk --strip-components=1
+
+      - name: Add package feed + build ipk
+        run: |
+          cd "$HOME/sdk"
+          echo "src-link custom $GITHUB_WORKSPACE" >> feeds.conf.default
+          ./scripts/feeds update base packages luci custom
+          ./scripts/feeds install luci-app-aether
+          printf 'CONFIG_PACKAGE_luci-app-aether=m\n' > .config
+          make defconfig
+          make package/luci-app-aether/compile -j"$(nproc)" V=s
+          find bin -name 'luci-app-aether*.*pk'
+
+      - name: Collect package
+        run: |
+          mkdir -p dist
+          find ~/sdk/bin -name 'luci-app-aether*.*pk' -exec cp {} dist/ \;
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: luci-app-aether-ipq40xx-${{ github.event.inputs.owrt_series }}
+          path: dist/*.*pk
+
+      - name: Release on router-* tags
+        if: startsWith(github.ref, 'refs/tags/router-')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: dist/*.*pk

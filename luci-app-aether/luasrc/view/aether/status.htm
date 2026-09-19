@@ -1,160 +1,409 @@
 <%+header%>
-<div id="aether-dashboard">
-	<h1>🔐 Aether Core Dashboard</h1>
+<style>
+/* Dark mode variables */
+:root {
+    --bg-primary: #f5f5f5;
+    --bg-card: #fff;
+    --text-primary: #212121;
+    --text-secondary: #757575;
+    --text-muted: #9e9e9e;
+    --border-color: #e0e0e0;
+    --shadow: 0 1px 4px rgba(0,0,0,0.08);
+    --shadow-hover: 0 4px 12px rgba(0,0,0,0.12);
+}
+[data-theme="dark"] {
+    --bg-primary: #121212;
+    --bg-card: #1e1e1e;
+    --text-primary: #e0e0e0;
+    --text-secondary: #9e9e9e;
+    --text-muted: #666;
+    --border-color: #333;
+    --shadow: 0 1px 4px rgba(0,0,0,0.3);
+    --shadow-hover: 0 4px 12px rgba(0,0,0,0.5);
+}
 
-	<!-- Connection Status -->
-	<div id="status-card" class="card">
-		<h2>Connection Status</h2>
-		<div class="status-row">
-			<span class="label">Core:</span>
-			<span id="core-status" class="value">Checking...</span>
-			<span id="core-dot" class="dot"></span>
+body { background: var(--bg-primary); color: var(--text-primary); }
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg-primary: #121212;
+        --bg-card: #1e1e1e;
+        --text-primary: #e0e0e0;
+        --text-secondary: #9e9e9e;
+        --text-muted: #666;
+        --border-color: #333;
+        --shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+}
+
+/* Dashboard grid */
+#theme-toggle { position: fixed; top: 12px; right: 12px; z-index: 1000;
+    background: var(--bg-card); border: 1px solid var(--border-color);
+    border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 18px; }
+
+.dashboard-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin-bottom: 20px;
+}
+
+.stat-card {
+    background: var(--bg-card); border-radius: 12px; padding: 20px;
+    box-shadow: var(--shadow); transition: all 0.3s ease;
+    position: relative; overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+.stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+.stat-card .stat-icon { font-size: 28px; margin-bottom: 8px; opacity: 0.8; }
+.stat-card .stat-value { font-size: 26px; font-weight: 700; color: var(--text-primary); }
+.stat-card .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card .stat-detail { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.stat-card .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.dot-green { background: #4caf50; box-shadow: 0 0 6px #4caf50; }
+.dot-red { background: #f44336; box-shadow: 0 0 6px #f44336; }
+.dot-orange { background: #ff9800; box-shadow: 0 0 6px #ff9800; }
+.dot-blue { background: #2196f3; box-shadow: 0 0 6px #2196f3; }
+.dot-gray { background: #757575; }
+.dot-purple { background: #9c27b0; box-shadow: 0 0 6px #9c27b0; }
+
+.card-primary { border-top: 3px solid #2196f3; }
+.card-success { border-top: 3px solid #4caf50; }
+.card-warning { border-top: 3px solid #ff9800; }
+.card-danger { border-top: 3px solid #f44336; }
+.card-info { border-top: 3px solid #9c27b0; }
+
+/* Controls */
+.controls-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer;
+    font-size: 14px; font-weight: 600; transition: all 0.2s;
+    background: #555; color: #fff; }
+.btn-green { background: #4caf50; } .btn-red { background: #f44336; }
+.btn-orange { background: #ff9800; } .btn-blue { background: #2196f3; }
+.btn-gray { background: #607d8b; } .btn-purple { background: #9c27b0; }
+.btn:hover { opacity: 0.85; transform: scale(1.02); }
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Charts */
+.chart-section { background: var(--bg-card); border-radius: 12px; padding: 20px;
+    margin-bottom: 20px; box-shadow: var(--shadow); border: 1px solid var(--border-color); }
+.chart-section h2 { margin: 0 0 16px; font-size: 16px; color: var(--text-primary); }
+#latency-chart { width: 100%; height: 200px; }
+#uptime-chart { width: 100%; height: 150px; margin-top: 16px; }
+#uptime-chart canvas { width: 100% !important; height: 100% !important; }
+.log-box { background: #1a1a1a; color: #0f0; padding: 16px; border-radius: 8px;
+    font-family: monospace; font-size: 12px; max-height: 250px;
+    overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+.log-box.dark { background: #0d0d0d; }
+
+/* Polling indicator */
+#poll-indicator { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+#poll-status { margin-left: 12px; }
+
+/* Responsive */
+@media (max-width: 600px) {
+    .dashboard-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stat-card { padding: 14px; }
+    .stat-card .stat-value { font-size: 22px; }
+    .btn { padding: 8px 14px; font-size: 13px; }
+}
+@media (max-width: 400px) { .dashboard-grid { grid-template-columns: 1fr; } }
+</style>
+
+<button id="theme-toggle" onclick="toggleTheme()">🌓</button>
+<div id="aether-dashboard">
+	<h1 style="font-size:24px;margin-bottom:20px;color:#212121;">🔐 Aether Core Dashboard</h1>
+
+	<!-- Adaptive polling indicator -->
+	<div id="poll-indicator" style="font-size:12px;color:#9e9e9e;margin-bottom:8px;">
+		<span id="poll-mode">Polling: <span id="poll-interval">--</span>s</span>
+		<span id="poll-status" style="margin-left:12px;"></span>
+	</div>
+
+	<!-- Stat Cards Grid -->
+	<div class="dashboard-grid">
+		<div class="stat-card card-primary">
+			<div class="stat-icon">⚡</div>
+			<div class="stat-value" id="stat-core">
+				<span class="status-dot dot-orange"></span> Checking...
+			</div>
+			<div class="stat-label">Core Status</div>
+			<div class="stat-detail" id="stat-core-detail">Waiting...</div>
 		</div>
-		<div class="status-row">
-			<span class="label">Protocol:</span>
-			<span id="protocol" class="value">-</span>
+		<div class="stat-card card-success">
+			<div class="stat-icon">🌐</div>
+			<div class="stat-value" id="stat-protocol">-</div>
+			<div class="stat-label">Protocol</div>
+			<div class="stat-detail" id="stat-protocol-detail">Select...</div>
 		</div>
-		<div class="status-row">
-			<span class="label">Auto-Connect:</span>
-			<span id="auto-connect" class="value">-</span>
+		<div class="stat-card card-warning">
+			<div class="stat-icon">📡</div>
+			<div class="stat-value" id="stat-youtube">—</div>
+			<div class="stat-label">YouTube</div>
+			<div class="stat-detail" id="stat-youtube-lat">—</div>
 		</div>
-		<div class="status-row">
-			<span class="label">Auto-Reconnect:</span>
-			<span id="auto-reconnect" class="value">-</span>
+		<div class="stat-card card-info">
+			<div class="stat-icon">🌍</div>
+			<div class="stat-value" id="stat-wan">—</div>
+			<div class="stat-label">WAN</div>
+			<div class="stat-detail" id="stat-wan-detail">Checking...</div>
 		</div>
-		<div class="status-row">
-			<span class="label">WAN:</span>
-			<span id="wan-status" class="value">Checking...</span>
+		<div class="stat-card card-danger">
+			<div class="stat-icon">⏱️</div>
+			<div class="stat-value" id="stat-uptime">-</div>
+			<div class="stat-label">Uptime</div>
+			<div class="stat-detail" id="stat-memory">—</div>
+		</div>
+		<div class="stat-card card-success">
+			<div class="stat-icon">🔄</div>
+			<div class="stat-value" id="stat-auto">—</div>
+			<div class="stat-label">Auto-Connect</div>
+			<div class="stat-detail" id="stat-auto-reconn">—</div>
 		</div>
 	</div>
 
-	<!-- YouTube Check -->
-	<div id="youtube-card" class="card">
-		<h2>YouTube Connectivity</h2>
-		<div class="status-row">
-			<span class="label">YouTube:</span>
-			<span id="youtube-status" class="value">Checking...</span>
+	<!-- Latency Chart -->
+	<div class="chart-section">
+		<h2>📊 YouTube Latency History</h2>
+		<div id="latency-chart">
+			<canvas id="latencyCanvas"></canvas>
 		</div>
-		<div class="status-row">
-			<span class="label">Latency:</span>
-			<span id="youtube-latency" class="value">-</span>
+		<h2 style="margin-top:20px;">⏱️ Core Uptime</h2>
+		<div id="uptime-chart">
+			<canvas id="uptimeCanvas"></canvas>
 		</div>
-		<div class="status-row">
-			<span class="label">HTTP Code:</span>
-			<span id="youtube-code" class="value">-</span>
-		</div>
-		<button id="btn-youtube" class="btn btn-blue">Check Now</button>
 	</div>
 
 	<!-- Controls -->
-	<div id="controls-card" class="card">
-		<h2>Controls</h2>
-		<button id="btn-connect" class="btn btn-green">Connect</button>
-		<button id="btn-disconnect" class="btn btn-red">Disconnect</button>
-		<button id="btn-reconnect" class="btn btn-orange">Reconnect</button>
-		<button id="btn-egress" class="btn btn-gray">Check Egress</button>
+	<div class="controls-bar">
+		<button id="btn-connect" class="btn btn-green">▶ Connect</button>
+		<button id="btn-disconnect" class="btn btn-red">■ Disconnect</button>
+		<button id="btn-reconnect" class="btn btn-orange">↻ Reconnect</button>
+		<button id="btn-youtube" class="btn btn-blue">📺 Check YouTube</button>
+		<button id="btn-egress" class="btn btn-gray">🌍 Egress</button>
+		<button id="btn-log" class="btn btn-gray">📋 Log</button>
 	</div>
 
 	<!-- Log -->
-	<div id="log-card" class="card">
-		<h2>Core Log</h2>
+	<div id="log-card" class="chart-section" style="display:none">
+		<h2>📋 Core Log</h2>
 		<div id="log-output" class="log-box">Waiting...</div>
-		<button id="btn-log" class="btn btn-gray">Refresh Log</button>
 	</div>
 
 	<!-- Egress Results -->
-	<div id="egress-card" class="card" style="display:none">
-		<h2>Egress Check</h2>
+	<div id="egress-card" class="chart-section" style="display:none">
+		<h2>🌍 Egress Check</h2>
 		<div id="egress-output" class="log-box"></div>
 	</div>
 </div>
 
-<style>
-#aether-dashboard { max-width: 800px; margin: 0 auto; font-family: -apple-system, sans-serif; }
-.card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-.card h2 { margin: 0 0 12px; font-size: 16px; color: #333; border-bottom: 2px solid #eee; padding-bottom: 8px; }
-.status-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f5f5f5; }
-.status-row .label { color: #666; font-size: 14px; }
-.status-row .value { font-weight: 600; font-size: 14px; }
-.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-left: 8px; }
-.dot.green { background: #4caf50; }
-.dot.red { background: #f44336; }
-.dot.orange { background: #ff9800; }
-.btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; margin-right: 8px; margin-top: 8px; }
-.btn-green { background: #4caf50; color: #fff; }
-.btn-red { background: #f44336; color: #fff; }
-.btn-orange { background: #ff9800; color: #fff; }
-.btn-blue { background: #2196f3; color: #fff; }
-.btn-gray { background: #607d8b; color: #fff; }
-.btn:hover { opacity: 0.85; }
-.log-box { background: #1e1e1e; color: #0f0; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
-</style>
-
 <script>
 (function() {
-	var pollInterval;
-	var youtubeInterval;
+	// ─── State ────────────────────────────
+	var polling = {
+		interval: 5,
+		mode: 'adaptive',
+		timer: null,
+		latencyHistory: [],
+		maxHistory: 30,
+		hidden: false,
+		lastActivity: Date.now()
+	};
 
+	// ─── Helpers ──────────────────────────
 	function $(id) { return document.getElementById(id); }
 
-	// ─── Fetch status ────────────────────
+	function setStat(id, html) { $(id).innerHTML = html; }
+
+	function dot(color) { return '<span class="status-dot dot-' + color + '"></span>'; }
+
+	// ─── Page Visibility API (S3) ──────────
+	document.addEventListener('visibilitychange', function() {
+		polling.hidden = document.hidden;
+		if (document.hidden) {
+			stopPolling();
+			$('poll-mode').textContent = 'Paused';
+			$('poll-status').textContent = '📴 Tab hidden';
+		} else {
+			polling.lastActivity = Date.now();
+			startPolling();
+		}
+	});
+
+	// ─── Adaptive Polling (S3) ─────────────
+	function getAdaptiveInterval() {
+		var timeSinceActive = (Date.now() - polling.lastActivity) / 1000;
+		if (timeSinceActive < 10) return 3;    // Recently active → fast
+		if (timeSinceActive < 60) return 5;    // Moderately active → normal
+		if (timeSinceActive < 300) return 10;  // Idle → slow
+		return 30;                              // Tab hidden → very slow (won't fire)
+	}
+
+	function startPolling() {
+		if (polling.timer) clearInterval(polling.timer);
+		var interval = getAdaptiveInterval();
+		polling.interval = interval;
+		$('poll-interval').textContent = interval;
+
+		polling.timer = setInterval(function() {
+			if (!document.hidden) {
+				fetchStatus();
+				// Update interval based on current activity
+				var newInterval = getAdaptiveInterval();
+				if (newInterval !== interval) {
+					startPolling(); // Restart with new interval
+				}
+			}
+		}, interval * 1000);
+	}
+
+	function stopPolling() {
+		if (polling.timer) { clearInterval(polling.timer); polling.timer = null; }
+	}
+
+	// ─── Fetch status ─────────────────────
 	function fetchStatus() {
-		fetch('<%=url('admin', 'services', 'aether', 'status')%>')
+		fetch('<%=url('admin', 'services', 'aether', 'stats')%>')
 			.then(r => r.json())
 			.then(d => {
-				// Core status
-				$('core-status').textContent = d.core || 'unknown';
-				$('core-dot').className = 'dot ' + (d.core === 'running' ? 'green' : 'red');
-				$('protocol').textContent = d.protocol || '-';
-
-				// Auto settings
-				$('auto-connect').textContent = d.auto_connect === '1' ? '✅ ON' : '❌ OFF';
-				$('auto-reconnect').textContent = d.auto_reconnect === '1' ? '✅ ON' : '❌ OFF';
-				$('wan-status').textContent = (d.wan && d.wan !== 'down') ? '✅ Up' : '❌ Down';
-
-				// YouTube
-				if (d.youtube_status && d.youtube_status.reachable !== undefined) {
-					updateYouTube(d.youtube_status);
-				}
+				updateStatCards(d);
+				updateLatencyChart(d);
 			})
 			.catch(e => console.error('Status fetch failed:', e));
 	}
 
-	// ─── YouTube check ───────────────────
-	function updateYouTube(d) {
-		if (!d) return;
-		$('youtube-status').textContent = d.reachable ? '✅ Connected' : '❌ Disconnected';
-		$('youtube-latency').textContent = d.latency || '-';
-		$('youtube-code').textContent = d.http_code || '-';
-		$('youtube-status').style.color = d.reachable ? '#4caf50' : '#f44336';
+	function updateStatCards(d) {
+		// Core
+		var coreHtml = d.core === 'running'
+			? dot('green') + ' Running'
+			: dot('red') + ' Stopped';
+		setStat('stat-core', coreHtml);
+		$('stat-core-detail').textContent = d.protocol || '-';
+
+		// Protocol
+		var protoHtml = '<span class="status-dot dot-blue"></span> ' + (d.protocol || '-');
+		setStat('stat-protocol', protoHtml);
+		$('stat-protocol-detail').textContent = d.core === 'running' ? 'Active' : 'Inactive';
+
+		// YouTube
+		if (d.youtube && d.youtube.reachable !== undefined) {
+			if (d.youtube.reachable) {
+				setStat('stat-youtube', dot('green') + ' OK');
+				$('stat-youtube-lat').textContent = d.youtube.latency || '-';
+			} else {
+				setStat('stat-youtube', dot('red') + ' FAIL');
+				$('stat-youtube-lat').textContent = 'Reconnecting...';
+			}
+		} else {
+			setStat('stat-youtube', dot('gray') + ' —');
+			$('stat-youtube-lat').textContent = 'Checking...';
+		}
+
+		// WAN
+		var wanHtml = d.wan === 'up' ? dot('green') + ' Up' : dot('red') + ' Down';
+		setStat('stat-wan', wanHtml);
+		$('stat-wan-detail').textContent = d.wan;
+
+		// Uptime / Memory
+		setStat('stat-uptime', d.uptime || '-');
+		$('stat-memory').textContent = d.memory ? 'Mem: ' + d.memory : '—';
+
+		// Auto-connect
+		var ac = d.config ? d.config.auto_connect : '-';
+		var ar = d.config ? d.config.auto_reconnect : '-';
+		var acHtml = ac === '1' ? dot('green') + ' ON' : dot('red') + ' OFF';
+		var arHtml = ar === '1' ? dot('green') + ' ON' : dot('gray') + ' OFF';
+		setStat('stat-auto', acHtml);
+		$('stat-auto-reconn').textContent = arHtml + ' reconnect';
 	}
 
-	function checkYouTube() {
-		fetch('<%=url('admin', 'services', 'aether', 'youtube')%>')
-			.then(r => r.json())
-			.then(d => updateYouTube(d))
-			.catch(e => console.error('YouTube check failed:', e));
+	function updateLatencyChart(d) {
+		if (!d.youtube || !d.youtube.latency) return;
+		var lat = parseFloat(d.youtube.latency);
+		if (isNaN(lat)) return;
+
+		polling.latencyHistory.push(lat);
+		if (polling.latencyHistory.length > polling.maxHistory) polling.latencyHistory.shift();
+		drawLatencyChart();
+	}
+
+	function drawLatencyChart() {
+		var canvas = $('latencyCanvas');
+		if (!canvas) return;
+		var ctx = canvas.getContext('2d');
+		var w = canvas.width = canvas.offsetWidth * 2;
+		var h = canvas.height = canvas.offsetHeight * 2;
+		ctx.clearRect(0, 0, w, h);
+
+		var data = polling.latencyHistory;
+		if (data.length < 2) return;
+
+		var maxVal = Math.max.apply(null, data) * 1.2;
+		maxVal = Math.max(maxVal, 10);
+		var padding = 40;
+		var chartW = w - padding * 2;
+		var chartH = h - padding * 2;
+		var stepX = chartW / (data.length - 1);
+
+		// Grid
+		ctx.strokeStyle = '#e0e0e0';
+		ctx.lineWidth = 1;
+		for (var i = 0; i < 5; i++) {
+			var y = padding + chartH - (i / 4) * chartH;
+			ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(w - padding, y); ctx.stroke();
+		}
+
+		// Line
+		ctx.strokeStyle = '#2196f3';
+		ctx.lineWidth = 3;
+		ctx.beginPath();
+		data.forEach(function(v, i) {
+			var x = padding + i * stepX;
+			var y = padding + chartH - (v / maxVal) * chartH;
+			i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+		});
+		ctx.stroke();
+
+		// Fill
+		ctx.lineTo(padding + (data.length - 1) * stepX, padding + chartH);
+		ctx.lineTo(padding, padding + chartH);
+		ctx.closePath();
+		ctx.fillStyle = 'rgba(33, 150, 243, 0.1)';
+		ctx.fill();
+
+		// Labels
+		ctx.fillStyle = '#757575';
+		ctx.font = '14px sans-serif';
+		ctx.fillText('0ms', padding, h - 8);
+		ctx.fillText(Math.round(maxVal) + 'ms', padding, padding + 14);
 	}
 
 	// ─── Controls ────────────────────────
 	function doConnect() {
-		fetch('<%=url('admin', 'services', 'aether', 'connect')%>', {method: 'POST'})
+		disableButtons();
+		fetch('<%=url('admin', 'services', 'aether', 'connect')%>', {method:'POST'})
 			.then(r => r.json())
-			.then(d => { $('core-status').textContent = 'starting'; $('core-dot').className = 'dot orange'; });
+			.then(d => { enableButtons(); });
 	}
-
 	function doDisconnect() {
-		fetch('<%=url('admin', 'services', 'aether', 'disconnect')%>', {method: 'POST'})
+		disableButtons();
+		fetch('<%=url('admin', 'services', 'aether', 'disconnect')%>', {method:'POST'})
 			.then(r => r.json())
-			.then(d => { $('core-status').textContent = 'stopped'; $('core-dot').className = 'dot red'; });
+			.then(d => { enableButtons(); });
 	}
-
 	function doReconnect() {
-		fetch('<%=url('admin', 'services', 'aether', 'reconnect')%>', {method: 'POST'})
+		disableButtons();
+		fetch('<%=url('admin', 'services', 'aether', 'reconnect')%>', {method:'POST'})
 			.then(r => r.json())
-			.then(d => { $('core-status').textContent = 'reconnecting'; $('core-dot').className = 'dot orange'; });
+			.then(d => { enableButtons(); });
 	}
-
+	function doYouTube() {
+		fetch('<%=url('admin', 'services', 'aether', 'youtube')%>')
+			.then(r => r.json())
+			.then(d => {
+				updateStatCards({youtube: d});
+				updateLatencyChart({youtube: d});
+			});
+	}
 	function doEgress() {
 		fetch('<%=url('admin', 'services', 'aether', 'egress')%>')
 			.then(r => r.json())
@@ -163,38 +412,104 @@
 				$('egress-output').textContent = JSON.stringify(d, null, 2);
 			});
 	}
-
+	function doLog() {
+		var lc = $('log-card');
+		lc.style.display = lc.style.display === 'none' ? 'block' : 'none';
+		if (lc.style.display === 'block') fetchLog();
+	}
 	function fetchLog() {
 		fetch('<%=url('admin', 'services', 'aether', 'log')%>')
 			.then(r => r.json())
-			.then(d => {
-				if (d.lines) $('log-output').textContent = d.lines.join('\n');
-			})
-			.catch(e => console.error('Log fetch failed:', e));
+			.then(d => { if (d.lines) $('log-output').textContent = d.lines.join('\n'); });
 	}
 
-	// ─── Polling ─────────────────────────
-	function startPolling() {
-		fetchStatus();
-		pollInterval = setInterval(fetchStatus, 5000);
-		checkYouTube();
-		youtubeInterval = setInterval(checkYouTube, 60000);
+	function disableButtons() {
+		['btn-connect','btn-disconnect','btn-reconnect'].forEach(function(id) {
+			$(id).disabled = true;
+		});
+	}
+	function enableButtons() {
+		['btn-connect','btn-disconnect','btn-reconnect'].forEach(function(id) {
+			$(id).disabled = false;
+		});
 	}
 
-	function stopPolling() {
-		clearInterval(pollInterval);
-		clearInterval(youtubeInterval);
+	// ─── Dark mode toggle (S6) ───────────
+	function toggleTheme() {
+		var body = document.documentElement;
+		var current = body.getAttribute('data-theme');
+		var next = current === 'dark' ? 'light' : 'dark';
+		body.setAttribute('data-theme', next);
+		localStorage.setItem('aether-theme', next);
+		document.getElementById('theme-toggle').textContent = next === 'dark' ? '☀️' : '🌓';
+	}
+	// Load saved theme
+	var savedTheme = localStorage.getItem('aether-theme');
+	if (savedTheme) {
+		document.documentElement.setAttribute('data-theme', savedTheme);
+		document.getElementById('theme-toggle').textContent = savedTheme === 'dark' ? '☀️' : '🌓';
+	} else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+		document.documentElement.setAttribute('data-theme', 'dark');
+		document.getElementById('theme-toggle').textContent = '☀️';
 	}
 
-	// ─── Event listeners ─────────────────
+	// ─── Uptime tracking (S4) ─────────────
+	var uptimeStart = Date.now();
+	var uptimeHistory = [];
+	var maxUptimeHistory = 30;
+
+	function trackUptime() {
+		var elapsed = Math.floor((Date.now() - uptimeStart) / 1000);
+		uptimeHistory.push(elapsed);
+		if (uptimeHistory.length > maxUptimeHistory) uptimeHistory.shift();
+		drawUptimeChart();
+	}
+
+	function drawUptimeChart() {
+		var canvas = document.getElementById('uptimeCanvas');
+		if (!canvas || uptimeHistory.length < 2) return;
+		var ctx = canvas.getContext('2d');
+		var w = canvas.width = canvas.offsetWidth * 2;
+		var h = canvas.height = canvas.offsetHeight * 2;
+		ctx.clearRect(0, 0, w, h);
+		var chartW = w - 40;
+		var chartH = h - 40;
+		var stepX = chartW / (uptimeHistory.length - 1);
+		var maxVal = Math.max.apply(null, uptimeHistory) * 1.2 || 60;
+
+		// Line
+		ctx.strokeStyle = '#4caf50';
+		ctx.lineWidth = 2;
+		ctx.beginPath();
+		uptimeHistory.forEach(function(v, i) {
+			var x = 20 + i * stepX;
+			var y = 20 + chartH - (v / maxVal) * chartH;
+			i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+		});
+		ctx.stroke();
+		ctx.fillStyle = 'rgba(76, 175, 80, 0.1)';
+		ctx.lineTo(20 + (uptimeHistory.length - 1) * stepX, 20 + chartH);
+		ctx.lineTo(20, 20 + chartH);
+		ctx.closePath();
+		ctx.fill();
+
+		ctx.fillStyle = '#9e9e9e';
+		ctx.font = '12px sans-serif';
+		ctx.fillText('0s', 10, h - 8);
+		ctx.fillText(Math.round(maxVal) + 's', 10, 16);
+	}
+
+	// ─── Init ────────────────────────────
 	document.addEventListener('DOMContentLoaded', function() {
 		startPolling();
+		fetchStatus(); // Initial fetch
+		setInterval(trackUptime, 1000); // Track uptime every second
 		$('btn-connect').addEventListener('click', doConnect);
 		$('btn-disconnect').addEventListener('click', doDisconnect);
 		$('btn-reconnect').addEventListener('click', doReconnect);
+		$('btn-youtube').addEventListener('click', doYouTube);
 		$('btn-egress').addEventListener('click', doEgress);
-		$('btn-youtube').addEventListener('click', checkYouTube);
-		$('btn-log').addEventListener('click', fetchLog);
+		$('btn-log').addEventListener('click', doLog);
 	});
 })();
 </script>

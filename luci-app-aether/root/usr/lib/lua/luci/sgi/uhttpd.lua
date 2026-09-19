@@ -1,31 +1,20 @@
--- Minimal LuCI uhttpd handler for Aether Core
--- Uses io.write() only to avoid circular dependencies
-function handle_request()
-	local io = io
-	local path = luci.http.getenv("PATH_INFO") or "/"
-	local method = luci.http.getenv("REQUEST_METHOD") or "GET"
+-- Standard LuCI SGI handler for uhttpd with embedded Lua
+-- When uhttpd-mod-lua is installed, this handler runs in-process
+-- without spawning /usr/bin/lua per request (3-5x faster)
+--
+-- The actual routing is handled by the controller (luasrc/controller/aether.lua)
+-- which is auto-loaded by luci.sgi.http when a request arrives.
 
-	-- API endpoints
-	if path:match("^/api/") then
-		io.write("Content-Type: application/json\r\n\r\n")
-		if path:match("/api/status$") then
-			-- handled by controller
-		elseif path:match("/api/connect$") then
-			-- handled by controller
-		elseif path:match("/api/egress$") then
-			-- handled by controller
-		elseif path:match("/api/log$") then
-			local lines = luci.http.formvalue("lines") or "50"
-			local log = luci.sys.exec("tail -" .. lines .. " /var/run/aether/core.log 2>/dev/null")
-			io.write(log)
-		elseif path:match("/api/config$") then
-			io.write("{}")
-		else
-			io.write('{"error":"unknown api path"}')
-		end
-		return
-	end
+-- This file serves as the SGI entry point for uhttpd-mod-lua.
+-- It simply loads the standard LuCI HTTP handler which dispatches
+-- to the appropriate controller/action.
 
-	-- Static content for the CBI framework
-	io.write("Content-Type: text/html; charset=utf-8\r\n\r\n")
+module("luci.sgi.uhttpd", package.seeall)
+
+function http()
+	return require "luci.sgi.http".http()
 end
+
+-- The actual request handling is done by:
+-- luci.sgi.http → luci.dispatcher → luci.controller.aether
+-- No additional routing needed here.
