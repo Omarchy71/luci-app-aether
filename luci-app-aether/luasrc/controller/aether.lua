@@ -47,9 +47,8 @@ local function get_ubus_wan_status()
 		return result.up == true and "up" or "down"
 	end
 	-- Fallback: direct check
-	local f = io.popen("ip route show default 2>/dev/null | wc -l")
-	local count = f:read("*a"):gsub("%s+", "")
-	f:close()
+	local sys = require "luci.sys"
+	local count = sys.net.ip() and "1" or "0"
 	return (count ~= "0") and "up" or "down"
 end
 
@@ -347,10 +346,8 @@ action_stats = function()
 			-- Fallback
 			local pids = sys.pidof("aether")
 			if pids and pids[1] then
-				local f = io.popen("cat /proc/" .. pids[1] .. "/stat 2>/dev/null | awk '{print $22}'")
-				local uticks = f:read("*a"):gsub("%s+", "")
-				f:close()
-				if uticks and tonumber(uticks) then uptime = (tonumber(uticks)/100) .. "s" end
+				local uptime_ms = sys.uptime()
+				if uptime_ms and tonumber(uptime_ms) then uptime = tostring(math.floor(uptime_ms/10)) .. "s" end
 			end
 			local mem_val = sys.meminfo()
 			if mem_val and mem_val["buffers/cache"] then
@@ -366,7 +363,7 @@ action_stats = function()
 		uptime = uptime,
 		memory = mem,
 		youtube = ydata,
-		wan = (io.popen("ip route show default 2>/dev/null | wc -l"):read("*a"):gsub("%s+", "") ~= "0") and "up" or "down",
+		wan = (sys.net.ip() and "1" or "0") == "1" and "up" or "down",
 		config = {
 			auto_connect = get_config("auto_connect") or "0",
 			auto_reconnect = get_config("auto_reconnect") or "0",
