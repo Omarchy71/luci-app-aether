@@ -43,7 +43,9 @@ load_options() {
 		upstream_proxy netstack_tcp_rx netstack_tcp_tx \
 		max_clients team access_id access_secret access_token \
 		access_email gateway log_level verbose perf_profile \
-		protocol; do
+		protocol auto_connect auto_reconnect reconnect_interval \
+		max_reconnect_attempts watchdog_interval wan_wait youtube_check \
+		youtube_check_interval check_url check_timeout; do
 		section_get "$o" "main"
 	done
 	[ -n "$tun_name" ] || tun_name="aether0"
