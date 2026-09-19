@@ -222,7 +222,7 @@ net_up() {
 	if [ "$direct_iran" = "1" ] && [ -z "$routes_file" ]; then
 		for f in "$SHARE_DIR/iran-v4.txt" "$SHARE_DIR/iran-v6.txt"; do
 			while read -r pfx; do
-				case "$pfx" in ''|#*) continue ;; esac
+				case "$pfx" in ''|\#*) continue ;; esac
 				if ip route add "$pfx" via "$WAN_GW" dev "$WAN_DEV" 2>/dev/null; then
 					echo "$pfx" >>"$RUN_DIR/iran.applied"
 				fi
