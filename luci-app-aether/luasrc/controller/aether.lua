@@ -373,3 +373,41 @@ action_stats = function()
 		timestamp = os.time()
 	})
 end
+
+-- ─── Proxy status endpoint ──────────
+action_proxy_status = function()
+	local proxy_en = get_config("proxy_enabled") or "0"
+	local http_port = get_config("http_port") or "8080"
+	local socks_port = get_config("socks_port") or "1080"
+	local proxy_bind = get_config("proxy_bind") or "0.0.0.0"
+	local mode = get_config("mode") or "vpn"
+
+	-- Read proxy info from runtime
+	local proxy_info = ""
+	local f = io.open("/var/run/aether/proxy_info.json", "r")
+	if f then
+		proxy_info = f:read("*a")
+		f:close()
+	end
+
+	local proxy_running = false
+	local http_pid, socks_pid = 0, 0
+	local fh = io.popen("pgrep -f tinyproxy 2>/dev/null | head -1")
+	if fh then http_pid = fh:read("*a"):gsub("%s+", "") fh:close() end
+	local fs = io.popen("pgrep -f microsocks 2>/dev/null | head -1")
+	if fs then socks_pid = fs:read("*a"):gsub("%s+", "") fs:close() end
+	if http_pid ~= "0" and socks_pid ~= "0" then proxy_running = true end
+
+	render_json({
+		mode = mode,
+		proxy_enabled = proxy_en,
+		http_port = http_port,
+		socks_port = socks_port,
+		proxy_bind = proxy_bind,
+		running = proxy_running,
+		http_pid = tonumber(http_pid) or 0,
+		socks_pid = tonumber(socks_pid) or 0,
+		proxy_info = proxy_info ~= "" and proxy_info or "{}"
+	})
+end
+

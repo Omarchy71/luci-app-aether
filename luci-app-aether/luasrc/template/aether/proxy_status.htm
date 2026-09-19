@@ -1,0 +1,14 @@
+<div class="cbi-section">
+	<div class="cbi-value-label"><%:Proxy Status%></div>
+	<div class="cbi-value-field">
+		<% if self.proxy_enabled and self.proxy_enabled == "1" then %>
+			<div style="color: #0f0; font-weight: bold;"><%:● Proxy ON</%></div>
+			<div style="margin-top: 5px;">
+				<b><%:HTTP Proxy:</%></b> <%= proxy_bind %>:<%= http_port %><br/>
+				<b><%:SOCKS5 Proxy:</%></b> <%= proxy_bind %>:<%= socks_port %>
+			</div>
+		<% else %>
+			<div style="color: #f00; font-weight: bold;"><%:○ Proxy OFF</%></div>
+		<% end %>
+	</div>
+</div>

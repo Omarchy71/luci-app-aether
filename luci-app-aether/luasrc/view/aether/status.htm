@@ -196,6 +196,28 @@ body { background: var(--bg-primary); color: var(--text-primary); }
 	</div>
 </div>
 
+
+<!-- ─── Proxy Status ──────────────────── -->
+<div id="proxy-section" style="display:none; margin-top:20px;">
+	<h2>Proxy Server</h2>
+	<div style="display:flex; gap:20px; flex-wrap:wrap;">
+		<div style="background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; padding:15px; border-radius:10px; min-width:200px;">
+			<div style="font-size:12px; opacity:0.8;">HTTP Proxy</div>
+			<div style="font-size:24px; font-weight:bold;" id="proxy-http">—</div>
+			<div style="font-size:11px; opacity:0.8;" id="proxy-http-port">:8080</div>
+		</div>
+		<div style="background:linear-gradient(135deg,#f093fb,#f5576c); color:#fff; padding:15px; border-radius:10px; min-width:200px;">
+			<div style="font-size:12px; opacity:0.8;">SOCKS5 Proxy</div>
+			<div style="font-size:24px; font-weight:bold;" id="proxy-socks">—</div>
+			<div style="font-size:11px; opacity:0.8;" id="proxy-socks-port">:1080</div>
+		</div>
+		<div style="background:linear-gradient(135deg,#4facfe,#00f2fe); color:#fff; padding:15px; border-radius:10px; min-width:200px;">
+			<div style="font-size:12px; opacity:0.8;">Status</div>
+			<div style="font-size:24px; font-weight:bold;" id="proxy-status-text">—</div>
+			<div style="font-size:11px; opacity:0.8;" id="proxy-local-ip">—</div>
+		</div>
+	</div>
+</div>
 <script>
 (function() {
 	// ─── State ────────────────────────────
@@ -269,7 +291,8 @@ body { background: var(--bg-primary); color: var(--text-primary); }
 				updateLatencyChart(d);
 			})
 			.catch(e => console.error('Status fetch failed:', e));
-	}
+			refreshProxy();
+}
 
 	function updateStatCards(d) {
 		// Core
@@ -512,5 +535,27 @@ body { background: var(--bg-primary); color: var(--text-primary); }
 		$('btn-log').addEventListener('click', doLog);
 	});
 })();
+function refreshProxy() {
+	fetch("api/aether/proxy_status")
+		.then(r => r.json())
+		.then(data => {
+			if (data.proxy_enabled === "1" || data.mode === "proxy") {
+				var section = document.getElementById("proxy-section");
+				if (section) section.style.display = "block";
+				var httpEl = document.getElementById("proxy-http");
+				var socksEl = document.getElementById("proxy-socks");
+				var statusEl = document.getElementById("proxy-status-text");
+				var ipEl = document.getElementById("proxy-local-ip");
+				if (httpEl) httpEl.textContent = (data.proxy_bind||"0.0.0.0") + ":" + (data.http_port||8080);
+				if (socksEl) socksEl.textContent = (data.proxy_bind||"0.0.0.0") + ":" + (data.socks_port||1080);
+				if (statusEl) statusEl.textContent = data.running ? "● Active" : "○ Stopped";
+				if (ipEl) ipEl.textContent = (data.proxy_bind||"0.0.0.0");
+			} else {
+				var section = document.getElementById("proxy-section");
+				if (section) section.style.display = "none";
+			}
+		})
+		.catch(e => {});
+}
 </script>
 <%+footer%>

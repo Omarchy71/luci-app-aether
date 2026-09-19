@@ -269,4 +269,38 @@ aem.default = ""
 local gw = s10:taboption("cf", Flag, "gateway", translate("Gateway"))
 gw.default = "0"
 
+
+-- ─── Proxy Mode Section ───────────────────
+local ps = m:section(NamedSection, "settings", "proxy", translate("Proxy Server"))
+
+ps:tab("main", translate("Proxy Settings"))
+local s = ps:taboption("main", Flag, "proxy_enabled", translate("Enable Proxy"), translate("Turn ON/OFF the local HTTP + SOCKS5 proxy server"))
+s.rmempty = false
+s.default = false
+
+s = ps:taboption("main", Value, "http_port", translate("HTTP Proxy Port"), translate("Port for HTTP proxy (e.g. 8080)"))
+s.datatype = "port"
+s.default = 8080
+s.rmempty = false
+
+s = ps:taboption("main", Value, "socks_port", translate("SOCKS5 Proxy Port"), translate("Port for SOCKS5 proxy (e.g. 1080)"))
+s.datatype = "port"
+s.default = 1080
+s.rmempty = false
+
+s = ps:taboption("main", Value, "proxy_bind", translate("Bind Address"), translate("IP address to bind proxy to (0.0.0.0 = all interfaces)"))
+s.default = "0.0.0.0"
+s.rmempty = false
+s.datatype = "ip4addr"
+
+s = ps:taboption("main", ListValue, "mode", translate("Connection Mode"), translate("Select VPN tunnel or local proxy mode"))
+s.default = "vpn"
+s.rmempty = false
+s:value("vpn", translate("VPN (WireGuard TUN)"))
+s:value("proxy", translate("Proxy (HTTP + SOCKS5)"))
+
+s = ps:taboption("main", DummyValue, "proxy_status", translate("Proxy Status"))
+s.template = "aether/proxy_status"
+s.readonly = true
+
 return m

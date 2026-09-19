@@ -29,7 +29,7 @@ define Package/luci-app-aether
   CATEGORY:=LuCI
   SUBMENU:=3. Applications
   TITLE:=LuCI support for Aether v2.0.0 gool (from-scratch redesign)
-  +DEPENDS:=+luci-base +luci-lua-runtime +uhttpd-mod-lua +kmod-zram +zram-swap +hev-socks5-tunnel +ip-full +kmod-tun +firewall4
+  +DEPENDS:=+luci-base +luci-lua-runtime +uhttpd-mod-lua +microsocks +tinyproxy +kmod-zram +zram-swap +hev-socks5-tunnel +ip-full +kmod-tun +firewall4
   PKGARCH:=$(PKGARCH)
 endef
 
