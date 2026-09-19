@@ -1,4 +1,3 @@
-<%-- Aether Core status page (from-scratch redesign). --%>
 <%+header%>
 <style>
 @import url('<%=luci.dispatcher.build_url("luci-static","resources","css","bootstrap","bootstrap.css")%>');
@@ -25,33 +24,36 @@
 
 <div class="aether-hero">
 	<h2><%:Censorship Circumvention</%></h2>
-	<p style="margin-bottom:0"><%:Gool (WG-in-WG) protocol · OpenWrt 24.10.5 · Linksys EA8300</%></p>
+	<p style="margin-bottom:0"><%:Gool · Masque · WireGuard · Mim protocols · OpenWrt 24.10.5 · Linksys EA8300</%></p>
 </div>
 
 <div class="aether-grid">
-	<!-- State -->
+	<div class="aether-card">
+		<h4><%:Protocol%></h4>
+		<div class="val" id="ae-protocol" style="color:#e94560">—</div>
+	</div>
 	<div class="aether-card">
 		<h4><%:State%></h4>
 		<div class="val"><span id="ae-state">—</span> <span id="ae-dot" class="aether-dot down"></span></div>
 		<div style="font-size:0.85em;color:#888;margin-top:4px" id="ae-uptime"></div>
 	</div>
-	<!-- Exit IP -->
 	<div class="aether-card">
 		<h4><%:Exit IP%></h4>
 		<div class="val" id="eg-ip" style="font-size:1.1em">—</div>
 		<div style="font-size:0.85em;color:#888;margin-top:4px" id="eg-cc">—</div>
 	</div>
-	<!-- TUN -->
 	<div class="aether-card">
 		<h4><%:TUN Interface%></h4>
 		<div class="val" id="ae-tun" style="font-size:1.1em">—</div>
 		<div style="font-size:0.85em;color:#888;margin-top:4px" id="ae-tun-info"></div>
 	</div>
-	<!-- Latency -->
 	<div class="aether-card">
 		<h4><%:TUN Latency%></h4>
 		<div class="val" id="eg-ping">—</div>
-		<div style="font-size:0.85em;color:#888;margin-top:4px"><%:UDP DNS through tunnel</%></div>
+	</div>
+	<div class="aether-card">
+		<h4><%:Core PID%></h4>
+		<div class="val" id="ae-pid">—</div>
 	</div>
 </div>
 
@@ -60,38 +62,22 @@
 	<fieldset class="cbi-section">
 		<legend><%:Connection</%></legend>
 		<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-			<button class="btn cbi-button cbi-button-real" id="ae-connect" style="font-size:1.1em;padding:10px 32px">
-				<%:Connect%>
-			</button>
-			<button class="btn cbi-button cbi-button-neutral" id="ae-disconnect" style="font-size:1em;padding:8px 20px">
-				<%:Disconnect%>
-			</button>
+			<button class="btn cbi-button cbi-button-real" id="ae-connect" style="font-size:1.1em;padding:10px 32px"><%:Connect%></button>
+			<button class="btn cbi-button cbi-button-neutral" id="ae-disconnect" style="font-size:1em;padding:8px 20px"><%:Disconnect%></button>
 			<span style="color:#888;font-size:0.85em" id="ae-status-text"></span>
 		</div>
 	</fieldset>
 </div>
 
-<!-- Traffic -->
-<div class="aether-grid">
-	<div class="aether-card">
-		<h4><%:Core PID%></h4>
-		<div class="val" id="ae-pid">—</div>
-	</div>
-	<div class="aether-card">
-		<h4><%:SOCKS5 Proxy%></h4>
-		<div class="val" id="ae-socks" style="font-size:1em">—</div>
-	</div>
-</div>
-
 <!-- Egress details -->
 <div class="cbi-section" style="margin-bottom:12px">
 	<fieldset class="cbi-section">
-		<legend><%:Egress Check%></legend>
+		<legend><%:Egress Check</%></legend>
 		<table class="table">
 			<tr><td class="td left"><%:Exit IP%></td><td class="td left" id="eg-ip2">—</td></tr>
 			<tr><td class="td left"><%:Exit Country%></td><td class="td left" id="eg-cc2">—</td></tr>
-			<tr><td class="td left"><%>TUN Ping</%></td><td class="td left" id="eg-ping2">—</td></tr>
-			<tr><td class="td left"><%>Last Checked</%></td><td class="td left" id="eg-ts">—</td></tr>
+			<tr><td class="td left"><%:TUN Ping</%></td><td class="td left" id="eg-ping2">—</td></tr>
+			<tr><td class="td left"><%:Last Checked</%></td><td class="td left" id="eg-ts">—</td></tr>
 			<tr><td class="td left"></td><td class="td left">
 				<button class="btn cbi-button cbi-button-neutral" id="eg-refresh"><%:Refresh Egress</%></button>
 			</td></tr>
@@ -102,40 +88,39 @@
 <!-- Log -->
 <div class="cbi-section">
 	<fieldset class="cbi-section">
-		<legend><%:Core Log%></legend>
+		<legend><%:Core Log</%></legend>
 		<div class="aether-log" id="ae-log">Loading...</div>
 	</fieldset>
 </div>
 
 <script type="text/javascript">
 (function() {
-	var EG_URL = '<%=luci.dispatcher.build_url("admin","services","aether","api","egress")%>';
 	var STATUS_URL = '<%=luci.dispatcher.build_url("admin","services","aether","api","status")%>';
+	var EG_URL = '<%=luci.dispatcher.build_url("admin","services","aether","api","egress")%>';
 	var CONNECT_URL = '<%=luci.dispatcher.build_url("admin","services","aether","api","connect")%>';
 	var LOG_URL = '<%=luci.dispatcher.build_url("admin","services","aether","api","log")%>';
-
-	var EG_NAMES = {US:'United States',DE:'Germany',NL:'Netherlands',FI:'Finland',GB:'United Kingdom',FR:'France',SE:'Sweden',NO:'Norway',CH:'Switzerland',AT:'Austria',IE:'Ireland',CA:'Canada',SG:'Singapore',JP:'Japan',AU:'Australia',PL:'Poland',CZ:'Czechia',ES:'Spain',IT:'Italy',PT:'Portugal',BE:'Belgium',DK:'Denmark',RO:'Romania',TR:'Turkey',AE:'UAE',QA:'Qatar',SA:'Saudi Arabia',IQ:'Iraq',IL:'Israel',EG:'Egypt',RU:'Russia',UA:'Ukraine',AZ:'Azerbaijan',AM:'Armenia',GE:'Georgia',KZ:'Kazakhstan',PK:'Pakistan',IN:'India',BR:'Brazil',KR:'South Korea',CN:'China',VN:'Vietnam',TH:'Thailand',MY:'Malaysia',ID:'Indonesia',PH:'Philippines',TW:'Taiwan',HK:'Hong Kong',SG:'Singapore'};
+	var EG_NAMES = {US:'United States',DE:'Germany',NL:'Netherlands',FI:'Finland',GB:'United Kingdom',FR:'France',SE:'Sweden',NO:'Norway',CH:'Switzerland',AT:'Austria',IE:'Ireland',CA:'Canada',SG:'Singapore',JP:'Japan',AU:'Australia',PL:'Poland',CZ:'Czechia',ES:'Spain',IT:'Italy',PT:'Portugal',BE:'Belgium',DK:'Denmark',RO:'Romania',TR:'Turkey',AE:'UAE',QA:'Qatar',SA:'Saudi Arabia',IQ:'Iraq',IL:'Israel',EG:'Egypt',RU:'Russia',UA:'Ukraine',AZ:'Azerbaijan',AM:'Armenia',GE:'Georgia',KZ:'Kazakhstan',PK:'Pakistan',IN:'India',BR:'Brazil',KR:'South Korea',CN:'China',VN:'Vietnam',TH:'Thailand',MY:'Malaysia',ID:'Indonesia',PH:'Philippines',TW:'Taiwan',HK:'Hong Kong'};
 	var bootTs = null;
 
 	function el(id) { return document.getElementById(id); }
 
-	function setState(st) {
+	function setState(st, protocol) {
 		el('ae-state').textContent = st;
 		var dot = el('ae-dot');
 		dot.className = 'aether-dot ' + (st === 'up' ? 'up' : st === 'starting' ? 'starting' : 'down');
 		el('ae-status-text').textContent = st === 'up' ? '<%:Connected%>' : st === 'starting' ? '<%:Connecting%>' : '<%:Disconnected%>';
+		if (protocol) el('ae-protocol').textContent = protocol.toUpperCase();
 	}
 
 	function loadStatus() {
 		fetch(STATUS_URL).then(r => r.json()).then(function(d) {
-			setState(d.state);
+			setState(d.state, d.protocol);
 			el('ae-uptime').textContent = d.uptime ? 'Since ' + d.uptime.replace('T',' ').replace(/Z$/,' UTC') : '';
 			el('ae-pid').textContent = d.core_pid || '—';
 			el('ae-tun').textContent = d.tun_name || '—';
 			el('ae-tun-info').textContent = d.tun_info || '';
 			var socks = d.socks_ok === '0' ? '<%:Listening%>' : '<%:Not ready%>';
 			el('ae-socks').textContent = '127.0.0.1:1080 — ' + socks;
-			// Log
 			if (d.last_log && d.last_log !== '|||') {
 				var lines = d.last_log.split('|').slice(-15);
 				var html = '';
@@ -161,38 +146,19 @@
 			} else {
 				el('eg-ip').textContent = d.state;
 				el('eg-ip2').textContent = d.state;
-				el('eg-cc').textContent = '—';
-				el('eg-cc2').textContent = '—';
-				el('eg-ping').textContent = '—';
-				el('eg-ping2').textContent = '—';
+				el('eg-cc').textContent = '—'; el('eg-cc2').textContent = '—';
+				el('eg-ping').textContent = '—'; el('eg-ping2').textContent = '—';
 				el('eg-ts').textContent = d.ts || '—';
 			}
 		}).catch(function() {});
 	}
 
-	// Connect/Disconnect
-	el('ae-connect').onclick = function() {
-		fetch(CONNECT_URL + '?action=connect').then(function() {
-			el('ae-status-text').textContent = '<%:Connecting%>';
-		});
-	};
-	el('ae-disconnect').onclick = function() {
-		fetch(CONNECT_URL + '?action=disconnect').then(function() {
-			el('ae-status-text').textContent = '<%:Disconnecting%>';
-		});
-	};
+	el('ae-connect').onclick = function() { fetch(CONNECT_URL + '?action=connect'); };
+	el('ae-disconnect').onclick = function() { fetch(CONNECT_URL + '?action=disconnect'); };
 	el('eg-refresh').onclick = function() { loadEgress(true); };
 
-	// Boot
-	loadStatus();
-	loadEgress(false);
-	bootTs = Date.now();
-
-	// Auto-refresh
-	setInterval(function() {
-		loadStatus();
-		loadEgress(false);
-	}, 5000);
+	loadStatus(); loadEgress(false); bootTs = Date.now();
+	setInterval(function() { loadStatus(); loadEgress(false); }, 5000);
 })();
 </script>
 <%+footer%>

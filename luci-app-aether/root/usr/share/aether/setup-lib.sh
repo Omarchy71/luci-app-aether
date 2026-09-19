@@ -29,11 +29,21 @@ section_get() { local _tmp; config_get _tmp "main" "$1" 2>/dev/null; export "$1=
 
 load_options() {
 	for o in enabled scan_mode ip_version noize quick_reconnect \
-		wg_peer wiw_outer wiw_inner wg_keepalive bind_address \
-		dns vpn_mode tun_name tun_mtu direct_iran route_direct route_block routes_file \
-		http_proxy http_port tls_groups validate_secs reconnect_secs \
-		no_profile_retry route_sniff sniffing_timeout_ms reprovision \
-		perf_profile wg_endpoint_cooldown netstack_tcp_rx netstack_tcp_tx; do
+		wg_peer wiw_outer wiw_inner wg_keepalive wiw_scan \
+		wg_endpoint_cooldown wg_stale_secs \
+		bind_address dns vpn_mode tun_name tun_mtu direct_iran \
+		route_direct route_block routes_file http_proxy http_port \
+		tls_groups validate_secs reconnect_secs no_profile_retry \
+		route_sniff sniffing_timeout_ms reprovision \
+		masque_h2 masque_quic_v2 masque_ech masque_fragment \
+		masque_fragment_size masque_fragment_delay masque_h2_peer \
+		masque_no_data_check startup_secs masque_h2_keepalive_secs \
+		mim_outer mim_inner \
+		tor tor_bind tor_dir tor_bridges tor_pt \
+		upstream_proxy netstack_tcp_rx netstack_tcp_tx \
+		max_clients team access_id access_secret access_token \
+		access_email gateway log_level verbose perf_profile \
+		protocol; do
 		section_get "$o" "main"
 	done
 	[ -n "$tun_name" ] || tun_name="aether0"
