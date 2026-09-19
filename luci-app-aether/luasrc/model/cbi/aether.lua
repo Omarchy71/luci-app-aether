@@ -1,205 +1,272 @@
--- Aether LuCI CBI model (multi-protocol support).
--- Settings for Aether v2.0.0: gool, masque, wg, mim on OpenWrt 24.10.5.
 local m = Map("aether", translate("Aether Core"),
-	translate("Multi-protocol censorship circumvention · gool, masque, wg, mim · OpenWrt 24.10.5"))
+	translate("Multi-protocol censorship circumvention with auto-connect, auto-reconnect, and YouTube monitoring on OpenWrt 24.10.5"))
 
-m.redirect = luci.dispatcher.build_url("admin", "services", "aether", "status")
+-- ══════════════════════════════════════════════════
+-- Section 0: Core Toggle
+-- ══════════════════════════════════════════════════
+local s0 = m:section(NamedSection, "main", "aether", translate("Core Settings"))
+s0:tab("core", translate("Core"))
 
--- ═══════════════════════════════════════════════════════
--- SECTION 1: Quick Status & Control
--- ═══════════════════════════════════════════════════════
-local s1 = m:section(NamedSection, "main", "aether", translate("Service Control"))
-s1.addremove = false
+local e = s0:taboption("core", Flag, "enabled", translate("Enable"), translate("Start Aether core on boot"))
+e.rmempty = false
+e.default = e.disabled
 
-local state_val = s1:option(DummyValue, "_state", translate("Status"))
-function state_val.cfgvalue(self, section)
-	local st = luci.sys.exec("cat /var/run/aether/state 2>/dev/null"):gsub("\n", "")
-	return (st == "") and translate("down") or st
-end
+local proto = s0:taboption("core", ListValue, "protocol", translate("Protocol"), translate("Select protocol"))
+proto:option("gool", "Gool (WG-in-WARP)")
+proto:option("masque", "Masque (HTTP/3 QUIC + HTTP/2)")
+proto:option("wg", "WireGuard")
+proto:option("mim", "Mim (MASQUE-in-MASQUE)")
+proto.rmempty = false
+proto.default = "gool"
 
-local btn = s1:option(Button, "_toggle", translate("Toggle Connection"))
-function btn.cfgvalue(self, section)
-	local st = luci.sys.exec("cat /var/run/aether/state 2>/dev/null"):gsub("\n", "")
-	if st == "up" then
-		self.inputtitle = translate("Disconnect")
-		self.inputstyle = "reset"
-	else
-		self.inputtitle = translate("Connect")
-		self.inputstyle = "apply"
-	end
-end
-function btn.write(self, section)
-	local st = luci.sys.exec("cat /var/run/aether/state 2>/dev/null"):gsub("\n", "")
-	if st == "up" then
-		luci.sys.call("/etc/init.d/aether disable; /etc/init.d/aether stop >/dev/null 2>&1")
-	else
-		luci.sys.call("/etc/init.d/aether enable; /etc/init.d/aether start >/dev/null 2>&1")
-	end
-	luci.http.redirect(luci.dispatcher.build_url("admin", "services", "aether"))
-end
+-- ══════════════════════════════════════════════════
+-- Section 1: Auto-Connect & Auto-Reconnect
+-- ══════════════════════════════════════════════════
+local s1 = m:section(NamedSection, "main", "aether", translate("Auto-Connect & Auto-Reconnect"))
+s1:tab("auto", translate("Auto"))
 
-local protocol = s1:option(ListValue, "protocol", translate("Protocol"))
-protocol:value("gool", translate("Gool (WG-in-WARP)") .. " — " .. translate("Recommended"))
-protocol:value("masque", translate("Masque") .. " — " .. translate("HTTP/3 QUIC + HTTP/2"))
-protocol:value("wg", translate("WireGuard") .. " — " .. translate("Classic WG"))
-protocol:value("mim", translate("Mim (MASQUE-in-MASQUE)"))
-protocol.rmempty = false
-protocol.description = translate("Select the protocol. Changing requires restart. Gool is the default.")
+local ac = s1:taboption("auto", Flag, "auto_connect", translate("Auto-Connect on Boot"), translate("Automatically connect when router starts"))
+ac.rmempty = false
+ac.default = ac.enabled
 
-local vpn_mode = s1:option(Flag, "vpn_mode", translate("Full-system VPN"),
-	translate("Layers hev-socks5-tunnel under the TUN interface."))
-vpn_mode.rmempty = false
+local ar = s1:taboption("auto", Flag, "auto_reconnect", translate("Auto-Reconnect"), translate("Automatically reconnect when connection drops"))
+ar.rmempty = false
+ar.default = ar.enabled
 
-local tun_name = s1:option(Value, "tun_name", translate("TUN interface"))
-tun_name.rmempty = false
-tun_name.placeholder = "aether0"
+local ri = s1:taboption("auto", Value, "reconnect_interval", translate("Reconnect Interval (s)"))
+ri.datatype = "uinteger"
+ri.default = "10"
+ri:depends("auto_reconnect", "1")
 
-local bind_addr = s1:option(Value, "bind_address", translate("SOCKS5 bind address"))
-bind_addr.rmempty = false
-bind_addr.placeholder = "127.0.0.1:1080"
+local ma = s1:taboption("auto", Value, "max_reconnect_attempts", translate("Max Reconnect Attempts"))
+ma.datatype = "uinteger"
+ma.placeholder = "0"
+ma.default = "0"
+ma:description(translate("0 = unlimited attempts"))
+ma:depends("auto_reconnect", "1")
 
--- ═══════════════════════════════════════════════════════
--- SECTION 2: Connection Profile
--- ═══════════════════════════════════════════════════════
-local s2 = m:section(NamedSection, "main", "aether", translate("Connection Profile"))
-s2.addremove = false
-s2.description = translate("Protocol set above. Controls endpoint discovery and obfuscation.")
+local wi = s1:taboption("auto", Value, "watchdog_interval", translate("Watchdog Interval (s)"))
+wi.datatype = "uinteger"
+wi.default = "30"
+wi:depends("auto_reconnect", "1")
 
-local scan_mode = s2:option(ListValue, "scan_mode", translate("Scan mode"))
-scan_mode:value("turbo", translate("Turbo"))
-scan_mode:value("balanced", translate("Balanced"))
-scan_mode:value("thorough", translate("Thorough"))
-scan_mode:value("stealth", translate("Stealth"))
-scan_mode:value("ironclad", translate("Ironclad"))
-scan_mode.default = "balanced"
+-- ══════════════════════════════════════════════════
+-- Section 2: YouTube Connectivity Check
+-- ══════════════════════════════════════════════════
+local s2 = m:section(NamedSection, "main", "aether", translate("YouTube Connectivity Check"))
+s2:tab("youtube", translate("YouTube"))
 
-local ip_version = s2:option(ListValue, "ip_version", translate("IP version"))
-ip_version:value("both", translate("Dual (IPv4 + IPv6)"))
-ip_version:value("v4", "IPv4 only")
-ip_version:value("v6", "IPv6 only")
+local yc = s2:taboption("youtube", Flag, "youtube_check", translate("Enable YouTube Check"), translate("Continuously check if YouTube is accessible through the tunnel"))
+yc.rmempty = false
+yc.default = yc.enabled
 
-local noize = s2:option(ListValue, "noize", translate("Obfuscation profile"))
-noize:value("balanced", translate("Balanced"))
-noize:value("gfw", translate("Great Firewall"))
-noize:value("aggressive", translate("Aggressive"))
-noize:value("light", translate("Light"))
-noize:value("firewall", translate("Firewall"))
-noize:value("none", translate("Off"))
-noize.default = "balanced"
-noize.description = translate("For gool and mim protocols.")
+local yi = s2:taboption("youtube", Value, "youtube_check_interval", translate("Check Interval (s)"))
+yi.datatype = "uinteger"
+yi.default = "60"
+yi:depends("youtube_check", "1")
 
-local qr = s2:option(Flag, "quick_reconnect", translate("Quick reconnect"))
-qr.rmempty = false
+local yu = s2:taboption("youtube", Value, "check_url", translate("Check URL"))
+yu.default = "https://www.youtube.com"
+yu:depends("youtube_check", "1")
 
-local npr = s2:option(Flag, "no_profile_retry", translate("No profile retry"))
-npr.rmempty = false
+local yt = s2:taboption("youtube", Value, "check_timeout", translate("Timeout (s)"))
+yt.datatype = "uinteger"
+yt.default = "15"
+yt:depends("youtube_check", "1")
 
--- ═══════════════════════════════════════════════════════
--- SECTION 3: Gool Endpoint Pinning
--- ═══════════════════════════════════════════════════════
-local s3 = m:section(NamedSection, "main", "aether", translate("Gool Endpoint Pinning"))
-s3.addremove = false
-s3:depends("protocol", "gool")
-s3.description = translate("Name known-good WG-in-WARP endpoints. Empty = auto-scan.")
+-- ══════════════════════════════════════════════════
+-- Section 3: Network Boot
+-- ══════════════════════════════════════════════════
+local s3 = m:section(NamedSection, "main", "aether", translate("Network Boot"))
+s3:tab("wan", translate("WAN"))
 
-s3:option(Value, "wg_peer", translate("gool peer"))
-s3:option(Value, "wiw_outer", translate("Outer hop"))
-s3:option(Value, "wiw_inner", translate("Inner hop"))
-s3:option(Flag, "wiw_scan", translate("Auto-scan endpoints"))
-s3:option(Value, "wg_keepalive", translate("Keepalive (seconds)"))
-s3:option(Value, "wg_endpoint_cooldown", translate("Endpoint cooldown (seconds)"))
-s3:option(Value, "wg_stale_secs", translate("WG stale timeout (seconds)"))
+local ww = s3:taboption("wan", Value, "wan_wait", translate("Wait for WAN (s)"))
+ww.datatype = "uinteger"
+ww.default = "30"
 
--- ═══════════════════════════════════════════════════════
--- SECTION 4: Masque Transport
--- ═══════════════════════════════════════════════════════
-local s4 = m:section(NamedSection, "main", "aether", translate("Masque Transport"))
-s4.addremove = false
-s4:depends("protocol", "masque")
+-- ══════════════════════════════════════════════════
+-- Section 4: Protocol-Specific Settings
+-- ══════════════════════════════════════════════════
+-- Gool settings (visible when protocol=gool)
+local s4 = m:section(NamedSection, "main", "aether", translate("Gool Settings"))
+s4:tab("gool", translate("Gool"))
+s4:depends("protocol", "gool")
 
-s4:option(Flag, "masque_h2", translate("HTTP/2 (TCP) instead of HTTP/3"))
-s4:option(Flag, "masque_quic_v2", translate("QUIC v2 opener"))
-s4:option(Value, "masque_ech", translate("ECH (auto or base64)"))
-s4:option(Value, "tls_groups", translate("TLS key share groups"))
-s4:option(Flag, "masque_fragment", translate("Fragment TLS ClientHello"))
-s4:option(Value, "masque_fragment_size", translate("Fragment size"))
-s4:option(Value, "masque_fragment_delay", translate("Fragment delay (ms)"))
-s4:option(Value, "masque_h2_peer", translate("HTTP/2 peer override"))
-s4:option(Flag, "masque_no_data_check", translate("Skip data-plane validation"))
-s4:option(Value, "startup_secs", translate("Startup deadline (seconds)"))
-s4:option(Value, "masque_h2_keepalive_secs", translate("HTTP/2 keepalive (seconds)"))
+local sm = s4:taboption("gool", ListValue, "scan_mode", translate("Scan Mode"))
+sm:option("balanced", "Balanced")
+sm:option("fast", "Fast")
+sm:option("thorough", "Thorough")
+sm:option("stealth", "Stealth")
+sm:option("ironclad", "Ironclad")
+sm.default = "balanced"
 
--- ═══════════════════════════════════════════════════════
--- SECTION 5: Mim
--- ═══════════════════════════════════════════════════════
-local s5 = m:section(NamedSection, "main", "aether", translate("MASQUE-in-MASQUE"))
-s5.addremove = false
-s5:depends("protocol", "mim")
+local iv = s4:taboption("gool", ListValue, "ip_version", translate("IP Version"))
+iv:option("both", "Both")
+iv:option("ipv4", "IPv4 Only")
+iv:option("ipv6", "IPv6 Only")
+iv.default = "both"
 
-s5:option(Value, "mim_outer", translate("Outer hop"))
-s5:option(Value, "mim_inner", translate("Inner hop"))
-s5:option(Flag, "masque_h2", translate("HTTP/2 for both hops"))
+local nz = s4:taboption("gool", ListValue, "noize", translate("Noize Obfuscation"))
+nz:option("none", "None")
+nz:option("light", "Light")
+nz:option("firewall", "Firewall")
+nz:option("balanced", "Balanced")
+nz:option("gfw", "GFW")
+nz:option("aggressive", "Aggressive")
+nz.default = "balanced"
 
--- ═══════════════════════════════════════════════════════
--- SECTION 6: Tor
--- ═══════════════════════════════════════════════════════
-local s6 = m:section(NamedSection, "main", "aether", translate("Tor Chaining"))
-s6.addremove = false
-s6:option(Flag, "tor", translate("Enable Tor"))
-s6:option(Value, "tor_bind", translate("Tor bind"))
-s6:option(Value, "tor_dir", translate("Tor directory"))
-s6:option(TextValue, "tor_bridges", translate("Tor bridges"))
-s6:option(TextValue, "tor_pt", translate("Tor pluggable transport"))
+local wr = s4:taboption("gool", Flag, "quick_reconnect", translate("Quick Reconnect"))
+wr.default = "1"
 
--- ═══════════════════════════════════════════════════════
--- SECTION 7: Routing
--- ═══════════════════════════════════════════════════════
-local s7 = m:section(NamedSection, "main", "aether", translate("Routing"))
-s7.addremove = false
+local wps = s4:taboption("gool", Value, "wg_peer", translate("WG Peer Endpoint"))
+wps.default = ""
 
-s7:option(Flag, "direct_iran", translate("Direct Iranian sites"))
-s7:option(TextValue, "route_direct", translate("Direct routes"))
-s7:option(TextValue, "route_block", translate("Blocked routes"))
-s7:option(Value, "routes_file", translate("Custom rules file"))
-s7:option(Flag, "route_sniff", translate("Route sniffing"))
-s7:option(Value, "sniffing_timeout_ms", translate("Sniff timeout (ms)"))
-s7:option(Flag, "reprovision", translate("Auto-reprovision"))
+local wos = s4:taboption("gool", Value, "wiw_outer", translate("WIW Outer Key"))
+wos.default = ""
 
--- ═══════════════════════════════════════════════════════
--- SECTION 8: Proxy & Resources
--- ═══════════════════════════════════════════════════════
-local s8 = m:section(NamedSection, "main", "aether", translate("Proxy & Resources"))
-s8.addremove = false
+local wis = s4:taboption("gool", Value, "wiw_inner", translate("WIW Inner Key"))
+wis.default = ""
 
-s8:option(Flag, "http_proxy", translate("HTTP CONNECT proxy"))
-s8:option(Value, "http_port", translate("HTTP proxy port"))
-s8:option(Value, "upstream_proxy", translate("Upstream proxy"))
-s8:option(Value, "netstack_tcp_rx", translate("Netstack TCP RX buffer"))
-s8:option(Value, "netstack_tcp_tx", translate("Netstack TCP TX buffer"))
-s8:option(Value, "max_clients", translate("Max concurrent clients"))
+local wss = s4:taboption("gool", Flag, "wiw_scan", translate("WIW Scan (auto endpoint)"))
+wss.default = "1"
 
--- ═══════════════════════════════════════════════════════
--- SECTION 9: Cloudflare Zero Trust
--- ═══════════════════════════════════════════════════════
-local s9 = m:section(NamedSection, "main", "aether", translate("Cloudflare Zero Trust"))
-s9.addremove = false
-s9:option(Value, "team", translate("Team name"))
-s9:option(Value, "access_id", translate("Access client ID"))
-s9:option(Value, "access_secret", translate("Access secret"))
-s9:option(Value, "access_token", translate("Access token"))
-s9:option(Value, "access_email", translate("Access email"))
-s9:option(Flag, "gateway", translate("Gateway proxy"))
+local wk = s4:taboption("gool", Value, "wg_keepalive", translate("WG Keepalive (s)"))
+wk.datatype = "uinteger"
+wk.default = "25"
 
--- ═══════════════════════════════════════════════════════
--- SECTION 10: DNS & Performance
--- ═══════════════════════════════════════════════════════
-local s10 = m:section(NamedSection, "main", "aether", translate("DNS & Performance"))
-s10.addremove = false
+local wc = s4:taboption("gool", Value, "wg_endpoint_cooldown", translate("WG Endpoint Cooldown (s)"))
+wc.datatype = "uinteger"
+wc.default = "300"
 
-s10:option(Value, "dns", translate("Upstream DNS"))
-s10:option(ListValue, "log_level", translate("Log level")):value("info", "Info")
-s10:option(Flag, "verbose", translate("Verbose"))
-s10:option(ListValue, "perf_profile", translate("Performance profile"))
-s10:option(Value, "tun_mtu", translate("TUN MTU"))
+local ba = s4:taboption("gool", Value, "bind_address", translate("SOCKS Bind Address"))
+ba.default = "127.0.0.1:1080"
+
+local dn = s4:taboption("gool", Value, "dns", translate("DNS"))
+dn.default = "1.1.1.1"
+
+-- Masque settings
+local s5 = m:section(NamedSection, "main", "aether", translate("Masque Settings"))
+s5:tab("masque", translate("Masque"))
+s5:depends("protocol", "masque")
+
+local h2 = s5:taboption("masque", Flag, "masque_h2", translate("HTTP/2"))
+h2.default = "0"
+
+local qv = s5:taboption("masque", Flag, "masque_quic_v2", translate("QUIC v2"))
+qv.default = "1"
+
+local ec = s5:taboption("masque", ListValue, "masque_ech", translate("ECH Mode"))
+ec:option("auto", "Auto")
+ec:option("enabled", "Enabled")
+ec:option("disabled", "Disabled")
+ec.default = "auto"
+
+local fr = s5:taboption("masque", Value, "masque_fragment", translate("TLS Fragment"))
+fr.default = "0"
+
+local fz = s5:taboption("masque", Value, "masque_fragment_size", translate("Fragment Size"))
+fz.default = ""
+
+local fd = s5:taboption("masque", Value, "masque_fragment_delay", translate("Fragment Delay"))
+fd.default = ""
+
+local tg = s5:taboption("masque", Value, "tls_groups", translate("TLS Groups"))
+tg.default = ""
+
+local hs = s5:taboption("masque", Value, "masque_h2_peer", translate("H2 Peer"))
+hs.default = ""
+
+local nd = s5:taboption("masque", Flag, "masque_no_data_check", translate("No Data Check"))
+nd.default = "0"
+
+local ss = s5:taboption("masque", Value, "startup_secs", translate("Startup Deadline (s)"))
+ss.datatype = "uinteger"
+ss.default = "30"
+
+-- WireGuard settings
+local s6 = m:section(NamedSection, "main", "aether", translate("WireGuard Settings"))
+s6:tab("wg", translate("WireGuard"))
+s6:depends("protocol", "wg")
+
+local wps2 = s6:taboption("wg", Value, "wg_peer", translate("WG Peer"))
+wps2.default = ""
+
+local wk2 = s6:taboption("wg", Value, "wg_keepalive", translate("Keepalive (s)"))
+wk2.datatype = "uinteger"
+wk2.default = "25"
+
+local ws2 = s6:taboption("wg", Flag, "no_profile_retry", translate("No Profile Retry"))
+ws2.default = "0"
+
+-- Mim settings
+local s7 = m:section(NamedSection, "main", "aether", translate("MIM Settings"))
+s7:tab("mim", translate("MIM"))
+s7:depends("protocol", "mim")
+
+local mo = s7:taboption("mim", Value, "mim_outer", translate("Outer MASQUE"))
+mo.default = ""
+
+local mi = s7:taboption("mim", Value, "mim_inner", translate("Inner MASQUE"))
+mi.default = ""
+
+-- Tor settings
+local s8 = m:section(NamedSection, "main", "aether", translate("Tor Chain"))
+s8:tab("tor", translate("Tor"))
+s8:depends("protocol", "tor")
+
+local tgb = s8:taboption("tor", Value, "tor_bridges", translate("Bridges"))
+tgb.default = ""
+
+local tpt = s8:taboption("tor", Value, "tor_pt", translate("Pluggable Transport"))
+tpt.default = ""
+
+-- ══════════════════════════════════════════════════
+-- Section 5: General Settings
+-- ══════════════════════════════════════════════════
+local s9 = m:section(NamedSection, "main", "aether", translate("General"))
+s9:tab("general", translate("General"))
+
+local tm = s9:taboption("general", Value, "tun_name", translate("TUN Name"))
+tm.default = "aether0"
+local mt = s9:taboption("general", Value, "tun_mtu", translate("TUN MTU"))
+mt.datatype = "uinteger"
+mt.default = "1420"
+local di = s9:taboption("general", Flag, "direct_iran", translate("Direct Iran Routes"))
+di.default = "1"
+local rs = s9:taboption("general", Flag, "route_sniff", translate("Route Sniffing"))
+rs.default = "1"
+local vs = s9:taboption("general", Value, "verbose", translate("Verbose"))
+vs.datatype = "uinteger"
+vs.default = "0"
+local ls = s9:taboption("general", ListValue, "log_level", translate("Log Level"))
+ls:option("debug", "Debug")
+ls:option("info", "Info")
+ls:option("warn", "Warning")
+ls:option("error", "Error")
+ls.default = "info"
+local pf = s9:taboption("general", ListValue, "perf_profile", translate("Performance Profile"))
+pf:option("low", "Low")
+pf:option("medium", "Medium")
+pf:option("high", "High")
+pf.default = "low"
+local rp = s9:taboption("general", Flag, "reprovision", translate("Reprovision"))
+rp.default = "1"
+
+-- Cloudflare Zero Trust
+local s10 = m:section(NamedSection, "main", "aether", translate("Cloudflare Zero Trust"))
+s10:tab("cf", translate("Zero Trust"))
+
+local tm2 = s10:taboption("cf", Value, "team", translate("Team"))
+tm2.default = ""
+local aid = s10:taboption("cf", Value, "access_id", translate("Access ID"))
+aid.default = ""
+local ase = s10:taboption("cf", Value, "access_secret", translate("Access Secret"))
+ase.default = ""
+local ato = s10:taboption("cf", Value, "access_token", translate("Access Token"))
+ato.default = ""
+local aem = s10:taboption("cf", Value, "access_email", translate("Access Email"))
+aem.default = ""
+local gw = s10:taboption("cf", Flag, "gateway", translate("Gateway"))
+gw.default = "0"
 
 return m

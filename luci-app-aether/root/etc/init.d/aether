@@ -1,89 +1,134 @@
 #!/bin/sh /etc/rc.common
-# shellcheck disable=SC2154,SC1090
-# Aether for OpenWrt — from-scratch redesign.
-# Drives Aether v2.0.0 core in gool-only mode on OpenWrt 24.10.5
-# (Linksys EA8300, ipq40xx/generic): full-system TUN via hev-socks5-tunnel,
-# Iranian direct routing, HTTP proxy, route sniffing.
-#
-# Two-phase start: procd receives core instance only after
-# start_service RETURNS. Any wait inside start_service deadlocks.
-# Core runs detached; finish task (/usr/share/aether/finish.sh)
-# handles SOCKS/TUN/routes with self-healing retry loop.
+# Aether Core init script with auto-connect, auto-reconnect, YouTube monitoring
+# Supports: OpenWrt 24.10.5, Linksys EA8300 (ipq40xx/generic)
 
 START=95
-STOP=10
+STOP=15
 USE_PROCD=1
 
-. /usr/share/aether/setup-lib.sh
+SERVICE_NAME=aether
+AETHER_DIR=/usr/share/aether
+AETHER_BIN=/usr/sbin/aether
+HEV_BIN=/usr/bin/hev-socks5-tunnel
 
-kill_finish() {
-	[ -f "$FINISH_PID" ] || return 0
-	read -r FP <"$FINISH_PID" 2>/dev/null
-	if [ -n "$FP" ] && grep -q "finish.sh" "/proc/$FP/cmdline" 2>/dev/null; then
-		kill "$FP" 2>/dev/null; sleep 1
-	fi
-	rm -f "$FINISH_PID"
+. $AETHER_DIR/setup-lib.sh
+
+# ─── helpers ──────────────────────────────────
+is_wan_up() {
+	ip route show default 2>/dev/null | grep -q "default" && return 0
+	return 1
 }
 
-start_service() {
-	config_load aether
-	load_options
-	mkdir -p "$RUN_DIR"
-	[ "$enabled" = "1" ] || { echo "down (disabled)" >$RUN_DIR/state; return 0; }
-
-	: >"$RUN_DIR/setup.log"
-	echo "starting" >"$RUN_DIR/state"
-	[ -x "$PROG_AETHER" ] || { log "ERROR: $PROG_AETHER missing"; echo "down" >$RUN_DIR/state; return 1; }
-	[ -x "$PROG_HEV" ] || { log "ERROR: $PROG_HEV missing"; echo "down" >$RUN_DIR/state; return 1; }
-
-	build_args
-	kill_finish
-	for p in $(pidof aether 2>/dev/null); do kill "$p" 2>/dev/null; done
-	for p in $(pidof hev-socks5-tunnel hev-socks5-tunn 2>/dev/null); do kill "$p" 2>/dev/null; done
-	sleep 1
-
-	# Start core directly (procd_open_instance doesn't spawn on this kernel)
-	setsid "$PROG_AETHER" $ARGS >>"$RUN_DIR/core.log" 2>&1 < /dev/null &
-	echo $! >"$RUN_DIR/core.pid"
-	log "core started (protocol=gool); finish task continues detached"
-
-	# Detached finish task handles SOCKS/TUN/routes
-	setsid "$SHARE_DIR/finish.sh" >>"$RUN_DIR/finish.log" 2>&1 < /dev/null &
+wait_for_wan() {
+	local wait_time="$(config_get main wan_wait '30')"
+	[ -z "$wait_time" ] && wait_time=30
+	local i=0
+	while [ $i -lt "$wait_time" ]; do
+		if is_wan_up; then
+			return 0
+		fi
+		sleep 1
+		i=$((i+1))
+	done
+	echo "[aether] WAN not fully up after ${wait_time}s, proceeding"
 	return 0
 }
 
-stop_service() {
-	[ -f "$NET_ENV" ] && . "$NET_ENV"
-	config_load aether 2>/dev/null && section_get tun_name tun_name "aether0"
-
-	kill_finish
-	for p in $(pidof hev-socks5-tunnel hev-socks5-tunn 2>/dev/null); do kill "$p" 2>/dev/null; done
-	ip route del default dev "$tun_name" 2>/dev/null
-	if [ -f "$RUN_DIR/iran.applied" ] && [ -n "$WAN_GW" ]; then
-		while read -r pfx; do
-			[ -n "$pfx" ] && ip route del "$pfx" via "$WAN_GW" 2>/dev/null
-		done <"$RUN_DIR/iran.applied"
-	fi
-	ip rule del fwmark "$FWMARK" table main priority 100 2>/dev/null
-	ip rule del fwmark "$FWMARK" table 100 priority 50 2>/dev/null
-	ip route flush table 100 2>/dev/null
-	rm -f "$RUN_DIR/iran.applied" "$NET_ENV" "$RUN_DIR/uptime" "$RUN_DIR/hev.pid"
-	echo "down" >"$RUN_DIR/state"
-	logger -t aether "DOWN"
+aether_running() {
+	pgrep -f "$AETHER_BIN" >/dev/null 2>&1
 }
 
-reload_service() {
-	stop
-	start
-}
-
-# Status command for LuCI
-status_service() {
+# ─── start service ────────────────────────────
+start_service() {
 	config_load aether
 	load_options
-	echo "state=$(cat $RUN_DIR/state 2>/dev/null || echo down)"
-	echo "tun=$tun_name"
-	echo "bind=$bind_address"
-	echo "core_pid=$(cat $RUN_DIR/core.pid 2>/dev/null || echo none)"
-	echo "socks_ok=$(nc -w1 $SOCKS_HOST $SOCKS_PORT < /dev/null 2>&1 | grep -c 'can.t connect' || echo 0)"
+
+	[ "$enabled" = "1" ] || return 1
+
+	echo "[aether] Starting..."
+	wait_for_wan
+	build_args
+
+	# Kill any stale instances
+	stop_service 2>/dev/null
+
+	# Start hev socks5 if vpn_mode=1
+	if [ "$vpn_mode" = "1" ]; then
+		mkdir -p /var/run/aether /var/run/hev
+		$HEV_BIN -b "$bind_address" -s &
+		sleep 1
+	fi
+
+	# Start aether core
+	mkdir -p /var/run/aether
+	$AETHER_BIN $ARGS &
+	echo "$ARGS" > /var/run/aether/args 2>/dev/null
+	echo "started" > /var/run/aether/core_state 2>/dev/null
+
+	# Start finish task (self-healing TUN)
+	setsid /usr/share/aether/finish.sh >/dev/null 2>&1 &
+
+	# Start watchdog if auto_reconnect enabled
+	if [ "$auto_reconnect" = "1" ]; then
+		setsid /usr/share/aether/egress-check.sh --watchdog >/dev/null 2>&1 &
+	fi
+
+	# Start YouTube monitoring if enabled
+	if [ "$youtube_check" = "1" ]; then
+		setsid /usr/share/aether/egress-check.sh --youtube >/dev/null 2>&1 &
+	fi
+
+	# Start initial YouTube check
+	if [ "$youtube_check" = "1" ]; then
+		/usr/share/aether/egress-check.sh --check-once >/dev/null 2>&1 &
+	fi
+
+	echo "[aether] Started (PID: $(pgrep -f $AETHER_BIN))"
+	echo "[aether] Auto-connect: $auto_connect, Auto-reconnect: $auto_reconnect, YouTube check: $youtube_check"
 }
+
+# ─── stop service ─────────────────────────────
+stop_service() {
+	echo "[aether] Stopping..."
+	pkill -TERM -f "$AETHER_BIN" 2>/dev/null
+	pkill -KILL -f "$AETHER_BIN" 2>/dev/null
+	pkill -TERM -f "$HEV_BIN" 2>/dev/null
+	pkill -KILL -f "$HEV_BIN" 2>/dev/null
+	ip route del table 100 2>/dev/null
+	ip route del table 200 2>/dev/null
+	ip link set "$tun_name" down 2>/dev/null
+	echo "stopped" > /var/run/aether/core_state 2>/dev/null
+	echo "[aether] Stopped"
+}
+
+# ─── restart with reconnect logic ─────────────
+restart_with_reconnect() {
+	config_load aether
+	load_options
+	echo "[aether] Restarting..."
+	stop_service
+	sleep "$reconnect_interval"
+	start_service
+}
+
+# ─── reload ───────────────────────────────────
+reload() {
+	config_load aether
+	load_options
+	if [ "$enabled" = "1" ]; then
+		if [ "$auto_reconnect" = "1" ]; then
+			restart_with_reconnect &
+		else
+			stop_service
+			start_service
+		fi
+	fi
+}
+
+# ─── triggers ─────────────────────────────────
+service_triggers() {
+	procd_add_reload_trigger "aether"
+	procd_add_network_trigger "interface.wan"
+}
+
+echo "[aether] Init script loaded"
