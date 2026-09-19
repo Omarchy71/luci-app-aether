@@ -1,12 +1,6 @@
 #!/bin/sh
-# On-demand egress probe for the LuCI status page — egress IP, exit
-# country and TUN ping. Runs ONLY on manual Refresh (or a stale cache),
-# never on page poll: the page polls the cached JSON, which is instant.
-#
-# Exit IP + country come from one HTTPS fetch to the Cloudflare trace
-# endpoint; latency comes from a UDP DNS query straight through the TUN.
-# (ICMP ping can't work here — hev-socks5-tunnel carries TCP/UDP only;
-# and this BusyBox has neither a `timeout` applet nor wget --tries.)
+# On-demand egress probe — egress IP, country, TUN ping.
+# Runs ONLY on manual Refresh (or stale cache). Page polls cached JSON.
 RUN_DIR=/var/run/aether
 OUT=$RUN_DIR/egress.json
 TMP=$OUT.tmp
@@ -20,9 +14,7 @@ if [ "$STATE" != "up" ] || ! ip link show "$TUN" >/dev/null 2>&1; then
 		&& mv "$TMP" "$OUT"
 	exit 0
 fi
-# Latency: one UDP DNS query straight through the TUN (ICMP can't pass
-# hev). nslookup has its own internal timeout — it fails, never hangs.
-# Exit code decides: an instant local failure must not read as 0 ms.
+# Latency: one UDP DNS query straight through the TUN
 T0="$(cut -d' ' -f1 /proc/uptime 2>/dev/null)"
 nslookup www.cloudflare.com 1.1.1.1 >/dev/null 2>&1
 RC=$?

@@ -27,7 +27,7 @@ while true; do
 	load_options
 	echo $$ >"$RUN_DIR/finish.pid"
 	restart_core
-	wait_for "SOCKS $bind_address" 1200 "! (nc $SOCKS_HOST $SOCKS_PORT < /dev/null 2>&1 | grep -q \"can.t connect\")" \
+	wait_for "SOCKS $bind_address" 1200 "! (nc $SOCKS_HOST $SOCKS_PORT < /dev/null 2>&1 | grep -q \"can't connect\")" \
 		|| { echo "down" >"$RUN_DIR/state"; rm -f "$RUN_DIR/finish.pid"; sleep 10; continue; }
 	config_load aether
 	section_get enabled enabled 0

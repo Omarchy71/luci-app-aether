@@ -1,7 +1,7 @@
 #!/bin/sh
 # luci-app-aether: keep the marked-egress WAN route (table 100) alive.
-# ifdown/ifup flushes routes bound to the device, which would strand the
-# core's marked packets in the (then dead) TUN and break re-scans.
+# ifdown/ifup flushes routes bound to the device, which would strand
+# the core's marked packets in the (then dead) TUN.
 [ "$ACTION" = "ifup" ] || exit 0
 [ "$INTERFACE" = "wan" ] || exit 0
 [ -n "$DEVICE" ] || exit 0

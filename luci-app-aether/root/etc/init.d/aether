@@ -1,36 +1,21 @@
 #!/bin/sh /etc/rc.common
 # shellcheck disable=SC2154,SC1090
-# Aether for OpenWrt (procd): drive the Aether v2.0.0 core in gool-only
-# mode (Linksys EA8300, ipq40xx/generic), layer hev-socks5-tunnel
-# as full-system TUN, and route Iranian destinations direct via the WAN.
+# Aether for OpenWrt — from-scratch redesign.
+# Drives Aether v2.0.0 core in gool-only mode on OpenWrt 24.10.5
+# (Linksys EA8300, ipq40xx/generic): full-system TUN via hev-socks5-tunnel,
+# Iranian direct routing, HTTP proxy, route sniffing.
 #
-# Two-phase start (do NOT collapse back into one): procd only receives
-# the core instance once start_service RETURNS (rc.common sends it in
-# procd_close_service). Any wait longer than a second inside
-# start_service therefore deadlocks the service — the core would never
-# spawn, and the wait could never succeed. So start_service only
-# registers the core and returns; the detached finish task
-# (/usr/share/aether/finish.sh) waits for the core's SOCKS port, then
-# layers hev/TUN + routes on top. Shared logic lives in setup-lib.sh.
-#
-# Flag map mirrors Aethery's profiles.rs as_args() for Protocol::Gool:
-# --gool, scan mode, IP version, quick-reconnect, --noize (WG family:
-# balanced/aggressive/light/off), --wg-peer, --wiw-outer/inner,
-# --keepalive, routing (--routes/--route-direct/--route-block) and
-# --mark. NOTE: --peer is deliberately NOT sent for gool (profiles.rs
-# only sends it for Auto/MASQUE/WireGuard); MASQUE-only flags
-# (--fragment/--ech/--tls-groups) and mim flags are not supported here.
-# Loop avoidance: marked core egress leaves via the WAN (fwmark 0x9e
-# → table 100), everything else defaults via the TUN once it is up.
+# Two-phase start: procd receives core instance only after
+# start_service RETURNS. Any wait inside start_service deadlocks.
+# Core runs detached; finish task (/usr/share/aether/finish.sh)
+# handles SOCKS/TUN/routes with self-healing retry loop.
+
 START=95
 STOP=10
 USE_PROCD=1
 
-# Shared setup logic (also used by the detached finish task); rc.common
-# already sourced /lib/functions.sh + procd.sh for this script.
 . /usr/share/aether/setup-lib.sh
 
-# Kill a stale finish task (verified by cmdline, never by bare PID).
 kill_finish() {
 	[ -f "$FINISH_PID" ] || return 0
 	read -r FP <"$FINISH_PID" 2>/dev/null
@@ -49,21 +34,20 @@ start_service() {
 	: >"$RUN_DIR/setup.log"
 	echo "starting" >"$RUN_DIR/state"
 	[ -x "$PROG_AETHER" ] || { log "ERROR: $PROG_AETHER missing"; echo "down" >$RUN_DIR/state; return 1; }
+	[ -x "$PROG_HEV" ] || { log "ERROR: $PROG_HEV missing"; echo "down" >$RUN_DIR/state; return 1; }
 
 	build_args
-	# A stale finish task would race the new one on SOCKS/TUN — stop it.
 	kill_finish
-	# Detached leftovers of a previous wedged start collide on --bind.
 	for p in $(pidof aether 2>/dev/null); do kill "$p" 2>/dev/null; done
 	for p in $(pidof hev-socks5-tunnel hev-socks5-tunn 2>/dev/null); do kill "$p" 2>/dev/null; done
 	sleep 1
-	# Start the core directly (procd_open_instance does NOT spawn the
-	# process on this OpenWrt kernel). The core runs detached with the
-	# finish task restarting it on failure so the service self-heals.
+
+	# Start core directly (procd_open_instance doesn't spawn on this kernel)
 	setsid "$PROG_AETHER" $ARGS >>"$RUN_DIR/core.log" 2>&1 < /dev/null &
 	echo $! >"$RUN_DIR/core.pid"
-	log "core started (protocol=gool); TUN finish continues detached"
-	# Must return immediately: finish task survives this shell.
+	log "core started (protocol=gool); finish task continues detached"
+
+	# Detached finish task handles SOCKS/TUN/routes
 	setsid "$SHARE_DIR/finish.sh" >>"$RUN_DIR/finish.log" 2>&1 < /dev/null &
 	return 0
 }
@@ -71,9 +55,8 @@ start_service() {
 stop_service() {
 	[ -f "$NET_ENV" ] && . "$NET_ENV"
 	config_load aether 2>/dev/null && section_get tun_name tun_name "aether0"
-	# Stop a pending finish task first so it can't resurrect hev/TUN.
+
 	kill_finish
-	# Backup for a detached hev (procd kills tracked instances itself).
 	for p in $(pidof hev-socks5-tunnel hev-socks5-tunn 2>/dev/null); do kill "$p" 2>/dev/null; done
 	ip route del default dev "$tun_name" 2>/dev/null
 	if [ -f "$RUN_DIR/iran.applied" ] && [ -n "$WAN_GW" ]; then
@@ -92,4 +75,15 @@ stop_service() {
 reload_service() {
 	stop
 	start
+}
+
+# Status command for LuCI
+status_service() {
+	config_load aether
+	load_options
+	echo "state=$(cat $RUN_DIR/state 2>/dev/null || echo down)"
+	echo "tun=$tun_name"
+	echo "bind=$bind_address"
+	echo "core_pid=$(cat $RUN_DIR/core.pid 2>/dev/null || echo none)"
+	echo "socks_ok=$(nc -w1 $SOCKS_HOST $SOCKS_PORT < /dev/null 2>&1 | grep -c 'can.t connect' || echo 0)"
 }

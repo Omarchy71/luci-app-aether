@@ -1,78 +1,123 @@
-# luci-app-aether (gool-only)
+# luci-app-aether — From-Scratch Redesign
 
-LuCI app + opkg package + procd service that drives the
-[Aether](https://github.com/CluvexStudio/Aether) censorship-circumvention core
-in **gool-only mode** (WG-in-WG) on OpenWrt routers, with full-system TUN via
-`hev-socks5-tunnel` and one-switch direct routing for all Iranian destinations.
+Complete LuCI web interface for the Aether v2.0.0 censorship-circumvention core on OpenWrt 24.10.5 (Linksys EA8300, ipq40xx/generic).
 
-This is the router sibling of [Aethery](https://github.com/Omarchy71/Aethery)
-(Windows desktop GUI): same core binary, same gool flag map, same embedded Iran
-prefix lists — re-expressed as UCI config + procd + LuCI instead of Tauri.
+## What This Package Provides
 
-## Target
+- **Aether Core v2.0.0** — gool-only (WARP-in-WARP) censorship circumvention
+- **hev-socks5-tunnel** — TUN engine for full-system VPN
+- **LuCI Dashboard** — modern web UI with real-time status, egress checking, and full configuration
+- **Procd Service** — self-healing init script with detached finish task
+- **Iran Direct Routing** — ~2850 embedded prefixes routed via WAN
+- **Single ipk Package** — all components bundled for easy installation
 
-Primary: **Linksys EA8300** (`ipq40xx/generic`, ARM Cortex-A7) on
-OpenWrt 24.10. The bundled core is upstream's `aether-linux-armv7-musl`
-(statically linked, pinned to the same `v2.0.0` as Aethery), so it runs on any
-armv7 OpenWrt target — but only `arm_cortex-a7_neon-vfpv4` ipks are built here.
+## Features
 
-Only the gool protocol is exposed: no MASQUE / WireGuard / mim options, no
-fragment / ECH / TLS-groups settings. The init script always passes `--gool`
-plus the gool-relevant flags (`--wg-peer`, `--wiw-outer/inner`, `--keepalive`,
-WG-family `--noize`), mirroring `profiles.rs` `as_args()` for `Protocol::Gool`.
+- gool-only protocol (WG-in-WARP) with all flag parity to the desktop apps
+- Modern dashboard with 5-second polling for state, egress IP, latency
+- Connect/Disconnect control buttons
+- Full configuration: scan mode, obfuscation, endpoint pinning, routing, DNS
+- HTTP CONNECT proxy support (optional)
+- Route sniffing with configurable timeout
+- TLS group configuration
+- Performance profile selector (low/medium/high)
+- Egress checking: exit IP, country, TUN latency
+- Real-time core log viewer
+- Self-healing retry loop for service recovery after reboot/power loss
+- Iranian direct routing with automatic prefix list updates
 
-## Install
+## Requirements
 
-Download `luci-app-aether_*.ipk` from
-[releases](https://github.com/Omarchy71/luci-app-aether/releases), copy to the
-router, then:
+- OpenWrt 24.10.5 (apk) on ipq40xx/generic (Linksys EA8300)
+- LuCI installed (`luci-lua-runtime`, `uhttpd-mod-lua`, `luci-base`)
+- Internet connectivity for the core to discover endpoints
 
-```sh
-opkg update
-opkg install hev-socks5-tunnel ip-full kmod-tun   # from official feeds
-opkg install luci-app-aether_*.ipk
-/etc/init.d/aether enable
+## Installation
+
+### Single-file installation (from built ipk):
+```bash
+# Copy the ipk to the router
+scp luci-app-aether_1.0.0-1_arm_cortex-a7_neon-vfpv4.ipk root@192.168.1.1:/tmp/
+
+# SSH into the router and install
+ssh root@192.168.1.1
+opkg install /tmp/luci-app-aether_*.ipk
 ```
 
-Then open LuCI → Services → Aether, fill in the gool endpoints (or leave them
-empty for auto-scan), tick **Direct Iranian sites**, and start.
+### Building from source:
+```bash
+# Clone this repository
+git clone https://github.com/Omarchy71/luci-app-aether.git
+cd luci-app-aether
 
-Upgrading from a pre-0.2.0 (multi-protocol) config: legacy options (`peer`,
-`mim_*`, `fragment*`, `ech`, `tls_groups`, MASQUE `firewall`/`gfw` noize) are
-ignored; `noize` falls back to `balanced`. Re-save once in LuCI to clean them.
-
-## How it works
-
-- `/etc/init.d/aether` (procd) builds the exact same gool CLI flags Aethery's
-  `profiles.rs` `as_args()` produces for gool (`--gool`, `--wg-peer`,
-  `--wiw-outer/inner`, `--noize`, `--keepalive`, `--route-direct/block`,
-  `--routes`, `--mark`), starts the core, waits for its SOCKS port, then
-  starts `hev-socks5-tunnel` on `aether0`.
-- Loop avoidance uses the Linux path: core + hev sockets carry fwmark `0x9e`
-  with an `ip rule fwmark … table main` bypass (no per-gateway routes needed).
-- **Direct Iranian sites** (`direct_iran`): at start, the 2087 IPv4 + 766 IPv6
-  aggregated Iranian prefixes in `usr/share/aether/` plus the domestic-domains
-  preset are written to `/var/run/aether/routes.txt` (`[direct]` section,
-  same format as Aethery's generated file) and passed as `--routes`; each
-  prefix also gets a direct route via the WAN gateway so it never enters the
-  tunnel. Your own `route_direct` entries merge in front, never replaced. A
-  custom `routes_file` stays authoritative (preset skipped, logged).
-- Unlike the desktop app, system DNS is deliberately left alone: dnsmasq keeps
-  using the WAN resolver, domestic names resolve to domestic IPs (which route
-  direct by prefix), foreign names resolve to foreign IPs (which go through
-  the tunnel).
-
-## Refreshing the Iran lists
-
-```sh
-bash scripts/refresh-iran-ranges.sh   # re-downloads + validates, from repo root
+# Build (requires OpenWrt SDK)
+make package/luci-app-aether/compile -j$(nproc) V=s
 ```
 
-Same source and validation as Aethery's `fetch` script.
+Or use GitHub Actions:
+- Push a `router-*` tag to trigger a build and release
+- Use `workflow_dispatch` for manual builds targeting 24.10 or 25.12
 
-## Building
+## Configuration
 
-Tagged `router-*` pushes (and manual dispatches) cross-build the ipk in
-GitHub Actions with the OpenWrt 24.10 SDK for `ipq40xx/generic`
-(`.github/workflows/build.yml`). The Aether core tarball is fetched at build
-time, hash-pinned in `luci-app-aether/Makefile`.
+After installation, access the web UI at `http://192.168.1.1/cgi-bin/luci/admin/services/aether`
+
+Default UCI config: `/etc/config/aether`
+
+### Key settings:
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | 0 | Enable/disable the service |
+| `scan_mode` | balanced | turbo/balanced/thorough/stealth/ironclad |
+| `ip_version` | both | v4/v6/both |
+| `noize` | balanced | none/light/firewall/balanced/gfw/aggressive |
+| `bind_address` | 127.0.0.1:1080 | SOCKS5 proxy address |
+| `vpn_mode` | 1 | 1=full TUN, 0=proxy only |
+| `dns` | 1.1.1.1 | Upstream DNS inside tunnel |
+| `direct_iran` | 1 | Route Iranian sites via WAN |
+| `tun_mtu` | 1420 | TUN interface MTU |
+
+## Architecture
+
+```
+Aether Core (/usr/sbin/aether)
+  ├── gool protocol (WG-in-WARP)
+  ├── SOCKS5 proxy at --bind
+  ├── Firewall mark 0x9e
+  └── Routes file for Iran direct
+
+hev-socks5-tunnel (/usr/bin/hev-socks5-tunnel)
+  ├── Creates TUN device (aether0)
+  ├── Reads YAML config from finish.sh
+  └── Provides full-system tunnel
+
+Procd (/etc/init.d/aether)
+  ├── start_service: launches core + finish task
+  ├── stop_service: cleans up routes, firewall
+  └── status_service: reports status for LuCI
+
+Finish Task (/usr/share/aether/finish.sh)
+  ├── Self-healing retry loop (while true)
+  ├── Waits for SOCKS port
+  ├── Starts hev (if vpn_mode=1)
+  ├── Configures net_up (routes, DNS, firewall)
+  └── Writes state file
+
+LuCI Web UI
+  ├── Controller: API endpoints
+  ├── CBI Model: Configuration form
+  └── Status Page: Real-time dashboard
+```
+
+## Iran Direct Routing
+
+The package includes ~2850 embedded IP prefixes for Iranian sites. These are routed directly via WAN instead of through the tunnel, allowing access to domestic services.
+
+To update the prefix lists:
+```bash
+/usr/share/aether/refresh-iran-ranges.sh
+```
+
+## License
+
+MIT

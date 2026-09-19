@@ -1,4 +1,4 @@
 # Aether Core firewall rules
 # Masquerade traffic from aether0 TUN interface
-nft add rule inet fw4 srcnat_wan oifname aether0 masquerade
-nft add rule inet fw4 accept_to_wan oifname aether0 counter accept
+nft add rule inet fw4 srcnat_wan oifname aether0 masquerade 2>/dev/null
+nft add rule inet fw4 accept_to_wan oifname aether0 counter accept 2>/dev/null
