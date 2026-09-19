@@ -25,7 +25,7 @@ valid_endpoint() {
 	esac
 }
 
-section_get() { local _v; _v=$(config_get "main" "$1" ""); export "$1=$_v"; }
+section_get() { local _tmp; config_get _tmp "main" "$1" 2>/dev/null; export "$1=$_tmp"; }
 
 load_options() {
 	for o in enabled scan_mode ip_version noize quick_reconnect \
