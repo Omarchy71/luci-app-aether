@@ -1,26 +1,25 @@
 config aether 'main'
 	option enabled '0'
-	# Fixed protocol: gool (WG-in-WG). Kept for display/compat only.
+	# Protocol selector: gool | masque | wg | mim
 	option protocol 'gool'
 	# Scan mode: turbo | balanced | thorough | stealth | ironclad
 	option scan_mode 'balanced'
 	# IP version: v4 | v6 | both
 	option ip_version 'both'
-	# Obfuscation profile: none | light | firewall | balanced | gfw | aggressive
-	option noize 'balanced'
 	# Quick reconnect (0 or 1)
 	option quick_reconnect '1'
-	# Endpoint pinning (host:port — empty = auto-scan)
-	option wg_peer ''
-	option wiw_outer ''
-	option wiw_inner ''
+	# Noize profile - WG-family: none|light|firewall|balanced|gfw|aggressive
+	# MASQUE: off|light|firewall|balanced|aggressive|gfw
+	option noize 'balanced'
 	# WireGuard keepalive (seconds)
 	option wg_keepalive '25'
-	# SOCKS5 bind address
+	# Skip profile retry during scan
+	option no_profile_retry '0'
+	# Bind address for SOCKS5
 	option bind_address '127.0.0.1:1080'
-	# Upstream DNS (comma-separated)
+	# Upstream DNS inside tunnel
 	option dns '1.1.1.1'
-	# Full-system VPN mode (0 = SOCKS proxy only, 1 = full TUN)
+	# Full-system VPN mode (1 = TUN, 0 = proxy only)
 	option vpn_mode '1'
 	# TUN interface name
 	option tun_name 'aether0'
@@ -28,35 +27,55 @@ config aether 'main'
 	option tun_mtu '1420'
 	# Direct routing for Iranian sites
 	option direct_iran '1'
-	# Custom direct routes (comma/newline)
+	# Custom direct routes
 	option route_direct ''
-	# Blocked routes (comma/newline)
+	# Blocked routes
 	option route_block ''
-	# Custom rules file path
+	# Custom rules file
 	option routes_file ''
-	# HTTP proxy (0 = off, 1 = on at port below)
-	option http_proxy '0'
-	# HTTP proxy port
-	option http_port '1820'
-	# TLS key share groups
-	option tls_groups ''
-	# Data-plane validation seconds
-	option validate_secs '10'
-	# Reconnect delay seconds
-	option reconnect_secs '2'
-	# Skip profile retry during scan
-	option no_profile_retry '0'
-	# Route sniffing (0 = off, 1 = on)
-	option route_sniff '1'
-	# Route sniffing timeout ms
-	option sniffing_timeout_ms '400'
-	# Reprovision identity
-	option reprovision '1'
-	# WG endpoint cooldown seconds
-	option wg_endpoint_cooldown '300'
-	# Performance profile: low | medium | high
-	option perf_profile 'low'
-	# Netstack TCP RX buffer
+
+	# ─── MASQUE-specific options ───
+	option masque_h2 '0'
+	option masque_quic_v2 '1'
+	option masque_ech 'auto'
+	option masque_fragment '0'
+	option masque_fragment_size ''
+	option masque_fragment_delay ''
+	option masque_h2_peer ''
+	option masque_no_data_check '0'
+	option startup_secs '30'
+	option masque_h2_keepalive_secs '15'
+	option wg_stale_secs '10'
+
+	# ─── General ───
+	option log_level 'info'
+	option verbose '0'
+	option wiw_scan '1'
+	option tor '0'
+	option tor_bind ''
+	option tor_dir ''
+	option tor_bridges ''
+	option tor_pt ''
+	option mim_outer ''
+	option mim_inner ''
+	option upstream_proxy ''
 	option netstack_tcp_rx ''
-	# Netstack TCP TX buffer
 	option netstack_tcp_tx ''
+	option max_clients '512'
+	option team ''
+	option access_id ''
+	option access_secret ''
+	option access_token ''
+	option access_email ''
+	option gateway '0'
+
+	# ─── HTTP CONNECT proxy ───
+	option http_proxy '0'
+	option http_port '1820'
+
+	# ─── Route sniffing ───
+	option route_sniff '1'
+	option sniffing_timeout_ms '400'
+	option reprovision '1'
+	option wg_endpoint_cooldown '300'
+	option perf_profile 'low'

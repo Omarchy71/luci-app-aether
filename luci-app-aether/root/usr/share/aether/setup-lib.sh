@@ -60,10 +60,17 @@ build_args() {
 	add() { ARGS="$ARGS $1"; }
 	add2() { ARGS="$ARGS $1 $2"; }
 
-	# Fixed protocol: gool (WG-in-WG). The Aether core always uses --gool.
-	add "--gool"
+	# ─── Protocol selector ──────────────────────────────
+	case "$protocol" in
+		masque) add "--masque" ;;
+		wg|wireguard) add "--wg" ;;
+		mim) add "--mim" ;;
+		*) add "--gool" ;;  # Default: gool (WG-in-WARP)
+	esac
 
-	# Scan mode
+	# ─── Common flags (all protocols) ────────────────────
+
+	# Scan mode (not for masque/mim which have different scanning)
 	case "$scan_mode" in
 		turbo) add "--turbo" ;;
 		thorough) add "--thorough" ;;
@@ -83,33 +90,24 @@ build_args() {
 	if [ "$quick_reconnect" = "1" ]; then add "--quick-reconnect";
 	else add "--no-quick-reconnect"; fi
 
-	# Noize (obfuscation) — WG-family only; fall back anything else to balanced
-	case "$noize" in
-		none|gfw|balanced|aggressive|light|off) add2 "--noize" "$noize" ;;
-		*) add2 "--noize" "balanced" ;;
-	esac
-
-	# Endpoint pinning for gool only
-	valid_endpoint "$wg_peer" && add2 "--wg-peer" "$wg_peer"
-	valid_endpoint "$wiw_outer" && add2 "--wiw-outer" "$wiw_outer"
-	valid_endpoint "$wiw_inner" && add2 "--wiw-inner" "$wiw_inner"
-	case "$wg_keepalive" in ''|*[!0-9]*) ;;
-		*) add2 "--keepalive" "$wg_keepalive" ;;
-	esac
-
 	# --bind must reach the core
 	[ -n "$bind_address" ] && add2 "--bind" "$bind_address"
 
-	# DNS
+	# DNS through tunnel
 	[ -n "$dns" ] && add2 "--dns" "$dns"
 
-	# HTTP proxy (optional)
+	# HTTP CONNECT proxy (optional)
 	if [ -n "$http_proxy" ] && [ "$http_proxy" = "1" ]; then
 		add2 "--http-proxy" "$SOCKS_HOST:$http_port"
 	fi
 
-	# TLS groups
-	[ -n "$tls_groups" ] && add2 "--tls-groups" "$tls_groups"
+	# Upstream proxy
+	[ -n "$upstream_proxy" ] && add2 "--upstream" "$upstream_proxy"
+	[ -n "$upstream_proxy" ] && [ "$upstream_proxy" = "http://"* ] && add "--h2"
+
+	# Route sniffing
+	[ "$route_sniff" = "0" ] && add "--route-sniff" "0"
+	add2 "--route-sniff-ms" "$sniffing_timeout_ms"
 
 	# Validate/reconnect secs
 	add2 "--validate-secs" "$validate_secs"
@@ -118,7 +116,113 @@ build_args() {
 	# No profile retry
 	[ "$no_profile_retry" = "1" ] && add "--no-profile-retry"
 
-	# Routing
+	# Reprovision
+	[ "$reprovision" = "1" ] && add "--reprovision"
+
+	# Firewall mark for loop avoidance
+	add2 "--mark" "$FWMARK"
+
+	# Perf profile
+	[ -n "$perf_profile" ] && add2 "--perf" "$perf_profile"
+
+	# Log level
+	[ -n "$log_level" ] && add2 "--log-level" "$log_level"
+	[ "$verbose" = "1" ] && add "--verbose"
+
+	# ─── Protocol-specific flags ─────────────────────────
+	case "$protocol" in
+
+		# ═══════════════════════════════════════════════
+		# GOOL (WG-in-WARP) — WG-family flags
+		# ═══════════════════════════════════════════════
+		gool)
+			# Noize/obfuscation (WG-family)
+			case "$noize" in
+				none|light|firewall|balanced|gfw|aggressive|off) add2 "--noize" "$noize" ;;
+				*) add2 "--noize" "balanced" ;;
+			esac
+
+			# Endpoint pinning
+			valid_endpoint "$wg_peer" && add2 "--wg-peer" "$wg_peer"
+			valid_endpoint "$wiw_outer" && add2 "--wiw-outer" "$wiw_outer"
+			valid_endpoint "$wiw_inner" && add2 "--wiw-inner" "$wiw_inner"
+			[ "$wiw_scan" = "1" ] && ! valid_endpoint "$wiw_outer" && add "--wiw-scan"
+			case "$wg_keepalive" in ''|*[!0-9]*) ;;
+				*) add2 "--keepalive" "$wg_keepalive" ;;
+			esac
+			add2 "--wg-endpoint-cooldown-secs" "$wg_endpoint_cooldown"
+			add2 "--wg-stale-secs" "$wg_stale_secs"
+			;;
+
+		# ═══════════════════════════════════════════════
+		# MASQUE (HTTP/3 QUIC / HTTP/2 TLS)
+		# ═══════════════════════════════════════════════
+		masque)
+			# Transport: HTTP/2 or HTTP/3
+			if [ "$masque_h2" = "1" ]; then add "--h2";
+			else add "--h3"; fi
+			[ "$masque_quic_v2" = "0" ] && add "--no-quic-v2"
+
+			# ECH
+			[ -n "$masque_ech" ] && add2 "--ech" "$masque_ech"
+
+			# TLS key share groups
+			[ -n "$tls_groups" ] && add2 "--tls-groups" "$tls_groups"
+
+			# Fragment TLS ClientHello
+			[ "$masque_fragment" = "1" ] && add "--fragment"
+			[ -n "$masque_fragment_size" ] && add2 "--fragment-size" "$masque_fragment_size"
+			[ -n "$masque_fragment_delay" ] && add2 "--fragment-delay" "$masque_fragment_delay"
+
+			# HTTP/2 peer override
+			[ -n "$masque_h2_peer" ] && add2 "--h2-peer" "$masque_h2_peer"
+
+			# Data-plane validation
+			[ "$masque_no_data_check" = "1" ] && add "--no-data-check"
+
+			# Startup/reconnect timing
+			add2 "--startup-secs" "$startup_secs"
+			add2 "--reconnect-secs" "$reconnect_secs"
+
+			# HTTP/2 keepalive
+			add2 "--h2-keepalive-secs" "$masque_h2_keepalive_secs"
+			;;
+
+		# ═══════════════════════════════════════════════
+		# WIREGUARD (classic WG)
+		# ═══════════════════════════════════════════════
+		wg|wireguard)
+			# Noize is not applicable for pure WG
+			# Peer pinning
+			valid_endpoint "$wg_peer" && add2 "--peer" "$wg_peer"
+			case "$wg_keepalive" in ''|*[!0-9]*) ;;
+				*) add2 "--keepalive" "$wg_keepalive" ;;
+			esac
+			[ "$no_profile_retry" = "1" ] && add "--no-profile-retry"
+			add2 "--wg-endpoint-cooldown-secs" "$wg_endpoint_cooldown"
+			add2 "--wg-stale-secs" "$wg_stale_secs"
+			;;
+
+		# ═══════════════════════════════════════════════
+		# MIM (MASQUE-in-MASQUE)
+		# ═══════════════════════════════════════════════
+		mim)
+			# Endpoint pinning for MASQUE-in-MASQUE
+			valid_endpoint "$mim_outer" && add2 "--mim-outer" "$mim_outer"
+			valid_endpoint "$mim_inner" && add2 "--mim-inner" "$mim_inner"
+			# Noize applies to inner MASQUE hop
+			case "$noize" in
+				none|light|firewall|balanced|gfw|aggressive|off) add2 "--noize" "$noize" ;;
+				*) add2 "--noize" "balanced" ;;
+			esac
+			# HTTP/2 or HTTP/3 for both hops
+			if [ "$masque_h2" = "1" ]; then add "--h2";
+			else add "--h3"; fi
+			add2 "--startup-secs" "$startup_secs"
+			;;
+	esac
+
+	# ─── Routing (applies to all protocols) ──────────────
 	if [ -n "$route_block" ]; then
 		add2 "--route-block" "$(echo "$route_block" | tr '\n' ',' | tr -s ',')"
 	fi
@@ -138,21 +242,33 @@ build_args() {
 		add2 "--route-direct" "$USER_DIRECT"
 	fi
 
-	# Firewall mark for loop avoidance
-	add2 "--mark" "$FWMARK"
+	# ─── Tor (optional, protocol-specific) ───────────────
+	case "$protocol" in
+		masque)
+			[ "$tor" = "1" ] && add "--tor-reverse"
+			[ -n "$tor_bridges" ] && add2 "--tor-bridges" "$tor_bridges"
+			[ -n "$tor_pt" ] && add2 "--tor-pt" "$tor_pt"
+			[ -n "$tor_dir" ] && add2 "--tor-dir" "$tor_dir"
+			;;
+		gool)
+			[ "$tor" = "1" ] && add "--tor"
+			[ -n "$tor_bind" ] && add2 "--tor-bind" "$tor_bind"
+			[ -n "$tor_dir" ] && add2 "--tor-dir" "$tor_dir"
+			;;
+	esac
 
-	# Route sniffing
-	[ "$route_sniff" = "0" ] && add "--route-sniff" "0"
-	add2 "--route-sniff-ms" "$sniffing_timeout_ms"
+	# ─── Additional resources ────────────────────────────
+	[ -n "$netstack_tcp_rx" ] && add2 "--netstack-tcp-rx" "$netstack_tcp_rx"
+	[ -n "$netstack_tcp_tx" ] && add2 "--netstack-tcp-tx" "$netstack_tcp_tx"
+	[ -n "$max_clients" ] && add2 "--max-clients" "$max_clients"
 
-	# Endpoint cooldown
-	add2 "--wg-endpoint-cooldown-secs" "$wg_endpoint_cooldown"
-
-	# Perf profile
-	[ -n "$perf_profile" ] && add2 "--perf" "$perf_profile"
-
-	# Reprovision
-	[ "$reprovision" = "1" ] && add "--reprovision"
+	# ─── Cloudflare Zero Trust (optional) ────────────────
+	[ -n "$team" ] && add2 "--team" "$team"
+	[ -n "$access_id" ] && add2 "--access-id" "$access_id"
+	[ -n "$access_secret" ] && add2 "--access-secret" "$access_secret"
+	[ -n "$access_token" ] && add2 "--access-token" "$access_token"
+	[ -n "$access_email" ] && add2 "--access-email" "$access_email"
+	[ "$gateway" = "1" ] && add "--gateway"
 
 	echo "$ARGS" >"$RUN_DIR/args"
 }
