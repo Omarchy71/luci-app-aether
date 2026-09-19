@@ -67,6 +67,10 @@ local function get_config(key)
 	return uci:get("aether", "main", key) or ""
 end
 
+local function get_proxy_config(key)
+	return uci:get("aether", "settings", key) or ""
+end
+
 local function get_status()
 	local f = fs.readfile("/var/run/aether/status.json")
 	if f then return json.parse(f) or {} end
@@ -376,10 +380,10 @@ end
 
 -- ─── Proxy status endpoint ──────────
 action_proxy_status = function()
-	local proxy_en = get_config("proxy_enabled") or "0"
-	local http_port = get_config("http_port") or "8080"
-	local socks_port = get_config("socks_port") or "1080"
-	local proxy_bind = get_config("proxy_bind") or "0.0.0.0"
+	local proxy_en = get_proxy_config("proxy_enabled") or "0"
+	local http_port = get_proxy_config("http_port") or "8080"
+	local socks_port = get_proxy_config("socks_port") or "1080"
+	local proxy_bind = get_proxy_config("proxy_bind") or "0.0.0.0"
 	local mode = get_config("mode") or "vpn"
 
 	-- Read proxy info from runtime

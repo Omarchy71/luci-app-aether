@@ -73,8 +73,6 @@ config aether 'main'
 # ─── Mode: proxy or vpn ────────────────────
 config 'mode' 'main'
     option 'mode' 'vpn'
-    option 'http_port' '8080'
-    option 'socks_port' '1080'
     option 'proxy_interface' '0.0.0.0'
 
 # ─── Proxy mode settings ───────────────────
